@@ -224,8 +224,20 @@ class CompilerIDE:
                 self.text_area.tag_add("NUMERO", start, end)
             elif tipo == "IDENTIFICADOR":
                 self.text_area.tag_add("IDENTIFICADOR", start, end)
-            elif tipo in ["COMENTARIO_SIMPLE", "COMENTARIO_MULTILINEA"]:
+                
+            elif tipo == "COMENTARIO_MULTILINEA":
+        # Pintar línea por línea
+                lineas = lexema.split("\n")
+                for i, linea_texto in enumerate(lineas):
+                    linea_actual = linea + i
+                    inicio_col = columna - 1 if i == 0 else 0
+                    fin_col = inicio_col + len(linea_texto)
+                    start = f"{linea_actual}.{inicio_col}"
+                    end = f"{linea_actual}.{fin_col}"
+                    self.text_area.tag_add("COMENTARIO", start, end)
+            elif tipo == "COMENTARIO_SIMPLE":
                 self.text_area.tag_add("COMENTARIO", start, end)
+
             elif tipo == "RESERVADA":
                 self.text_area.tag_add("RESERVADA", start, end)
             elif tipo == "OPERADOR_ARIT":
