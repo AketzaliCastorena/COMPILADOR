@@ -204,46 +204,51 @@ class CompilerIDE:
         code = self.text_area.get("1.0", tk.END)
         tokens, _ = tokenize(code)
 
-        # Limpiar todos los estilos previos
+        # Limpiar estilos anteriores
         for tag in self.text_area.tag_names():
             self.text_area.tag_remove(tag, "1.0", tk.END)
 
-        # Definir estilos
+        # Estilos de colores
         self.text_area.tag_configure("NUMERO", foreground="#FF0000")
         self.text_area.tag_configure("IDENTIFICADOR", foreground="#C71585")
         self.text_area.tag_configure("COMENTARIO", foreground="#008000")
         self.text_area.tag_configure("RESERVADA", foreground="#00CED1")
         self.text_area.tag_configure("OPERADOR_ARIT", foreground="#800080")
-        self.text_area.tag_configure("OPERADOR_REL_LOG", foreground="#778899")
+        self.text_area.tag_configure("OPERADOR_REL_LOG", foreground="#800080")
 
         for tipo, lexema, linea, columna in tokens:
-            start = f"{linea}.{columna - 1}"
-            end = f"{linea}.{columna - 1 + len(lexema)}"
+            try:
+                linea = int(linea)
+                columna = int(columna)
+            except ValueError:
+                continue
 
-            if tipo in ["NUMERO_ENTERO", "NUMERO_REAL"]:
-                self.text_area.tag_add("NUMERO", start, end)
-            elif tipo == "IDENTIFICADOR":
-                self.text_area.tag_add("IDENTIFICADOR", start, end)
-                
-            elif tipo == "COMENTARIO_MULTILINEA":
-        # Pintar línea por línea
-                lineas = lexema.split("\n")
-                for i, linea_texto in enumerate(lineas):
+            if tipo == "COMENTARIO_MULTILINEA":
+                lineas_lexema = lexema.split("\n")
+                for i, linea_texto in enumerate(lineas_lexema):
                     linea_actual = linea + i
                     inicio_col = columna - 1 if i == 0 else 0
                     fin_col = inicio_col + len(linea_texto)
                     start = f"{linea_actual}.{inicio_col}"
                     end = f"{linea_actual}.{fin_col}"
                     self.text_area.tag_add("COMENTARIO", start, end)
-            elif tipo == "COMENTARIO_SIMPLE":
-                self.text_area.tag_add("COMENTARIO", start, end)
+            else:
+                start = f"{linea}.{columna - 1}"
+                end = f"{linea}.{columna - 1 + len(lexema)}"
 
-            elif tipo == "RESERVADA":
-                self.text_area.tag_add("RESERVADA", start, end)
-            elif tipo == "OPERADOR_ARIT":
-                self.text_area.tag_add("OPERADOR_ARIT", start, end)
-            elif tipo in ["OPERADOR_REL", "OPERADOR_LOG"]:
-                self.text_area.tag_add("OPERADOR_REL_LOG", start, end)
+                if tipo in ["NUMERO_ENTERO", "NUMERO_REAL"]:
+                    self.text_area.tag_add("NUMERO", start, end)
+                elif tipo == "IDENTIFICADOR":
+                    self.text_area.tag_add("IDENTIFICADOR", start, end)
+                elif tipo == "COMENTARIO_SIMPLE":
+                    self.text_area.tag_add("COMENTARIO", start, end)
+                elif tipo == "RESERVADA":
+                    self.text_area.tag_add("RESERVADA", start, end)
+                elif tipo == "OPERADOR_ARIT":
+                    self.text_area.tag_add("OPERADOR_ARIT", start, end)
+                elif tipo in ["OPERADOR_REL", "OPERADOR_LOG"]:
+                    self.text_area.tag_add("OPERADOR_REL_LOG", start, end)
+
 
     def syntax_analysis(self):
         self.syntactic_tab.insert(tk.END, "Ejecutando análisis sintáctico...\n")

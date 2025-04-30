@@ -8,7 +8,7 @@ TOKEN_REGEX = [
     ("NUMERO_ENTERO", r"[+-]?\d+"),       # Luego enteros
     ("OPERADOR_ARIT", r"\+\+|--|\+|-|\*|/|%|\^"),
     ("OPERADOR_REL", r"<=|>=|==|!=|<|>"),
-    ("OPERADOR_LOG", r"\&\&|\|\||!"),
+    ("OPERADOR_LOG", r"\&\&|\&|\|\||!"),
     ("ASIGNACION", r"="),
     ("SIMBOLO", r"[(){}.,;]"),
     ("RESERVADA", r"\b(if|else|end|do|while|switch|case|int|float|main|cin|cout)\b"),
@@ -25,27 +25,52 @@ def calcular_linea_columna(texto, index):
     else:
         columna = index - ultima_nueva_linea
     return linea, columna
-
 def tokenize(text):
     tokens = []
     errors = []
     pos = 0
     while pos < len(text):
         match = None
-        
-        if pos+1 < len(text):
-            # Verificar por operadores de 2 caracteres (++, --)
-            if text[pos:pos+2] == "++":
+
+        # Manejo especial para ++
+        if text[pos] == '+':
+            next_pos = pos + 1
+            while next_pos < len(text) and text[next_pos] in [' ', '\t', '\n']:
+                if text[next_pos] == ';':
+                    break
+                next_pos += 1
+            if next_pos < len(text) and text[next_pos] == '+':
                 linea, columna = calcular_linea_columna(text, pos)
                 tokens.append(("OPERADOR_ARIT", "++", linea, columna))
-                pos += 2
+                pos = next_pos + 1
                 continue
-            elif text[pos:pos+2] == "--":
+
+        # Manejo especial para --
+        if text[pos] == '-':
+            next_pos = pos + 1
+            while next_pos < len(text) and text[next_pos] in [' ', '\t', '\n']:
+                if text[next_pos] == ';':
+                    break
+                next_pos += 1
+            if next_pos < len(text) and text[next_pos] == '-':
                 linea, columna = calcular_linea_columna(text, pos)
                 tokens.append(("OPERADOR_ARIT", "--", linea, columna))
-                pos += 2
-                continue 
-        
+                pos = next_pos + 1
+                continue
+
+        # Manejo especial para &&
+        if text[pos] == '&':
+            next_pos = pos + 1
+            while next_pos < len(text) and text[next_pos] in [' ', '\t', '\n']:
+                if text[next_pos] == ';':
+                    break
+                next_pos += 1
+            if next_pos < len(text) and text[next_pos] == '&':
+                linea, columna = calcular_linea_columna(text, pos)
+                tokens.append(("OPERADOR_LOG", "&&", linea, columna))
+                pos = next_pos + 1
+                continue
+
         for token in TOKEN_REGEX:
             token_type = token[0]
             regex = token[1]
@@ -57,6 +82,7 @@ def tokenize(text):
             if match:
                 lexeme = match.group(0)
 
+                # Verificación para enteros mal seguidos por puntos (ej. 12.a)
                 if token_type == "NUMERO_ENTERO":
                     if pos + len(lexeme) < len(text) and text[pos + len(lexeme)] == ".":
                         sig = text[pos + len(lexeme):]
@@ -66,30 +92,37 @@ def tokenize(text):
                             pos += len(lexeme) + 1
                             break
 
+                # Verificación para dobles puntos en números reales (ej. 12.34.56)
                 if token_type == "NUMERO_REAL":
                     fin = pos + len(lexeme)
-                    if fin < len(text) and re.match(r"[a-zA-Z_]", text[fin]):
+                    if fin < len(text) and text[fin] == '.':
                         linea, columna = calcular_linea_columna(text, fin)
-                        errors.append(f"Línea {linea}, Columna {columna}: carácter inválido '{text[fin]}'")
+                        errors.append(f"Línea {linea}, Columna {columna}: carácter inválido '.'")
                         pos = fin + 1
                         break
-                
-                if token_type == "COMENTARIO_SIMPLE" or token_type == "COMENTARIO_MULTILINEA":
+
+                if token_type in ["COMENTARIO_SIMPLE", "COMENTARIO_MULTILINEA"]:
                     pos = match.end()
                     break
-                
+
                 if token_type == "ESPACIO":
-                    pass
-                elif token_type == "DESCONOCIDO":
+                    pos = match.end()
+                    break
+
+                if token_type == "DESCONOCIDO":
                     linea, columna = calcular_linea_columna(text, pos)
                     errors.append(f"Línea {linea}, Columna {columna}: carácter inválido '{lexeme}'")
-                else:
-                    linea, columna = calcular_linea_columna(text, pos)
-                    tokens.append((token_type, lexeme, linea, columna))
+                    pos = match.end()
+                    break
+
+                linea, columna = calcular_linea_columna(text, pos)
+                tokens.append((token_type, lexeme, linea, columna))
                 pos = match.end()
                 break
+
         if not match:
             linea, columna = calcular_linea_columna(text, pos)
             errors.append(f"Línea {linea}, Columna {columna}: carácter no reconocido.")
             pos += 1
+
     return tokens, errors
