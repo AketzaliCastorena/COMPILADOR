@@ -1,8 +1,7 @@
-
-from PyQt5.QtGui import Qcolores_synta, QTextCharFormat, QColor, QFont
+from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont
 import re
 
-class colores_synta(Qcolores_synta):
+class SyntaxHighlighter(QSyntaxHighlighter):
     def __init__(self, document):
         super().__init__(document)
         self.highlighting_rules = []
