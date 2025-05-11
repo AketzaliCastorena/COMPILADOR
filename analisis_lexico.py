@@ -4,8 +4,9 @@ import re
 TOKEN_REGEX = [
     ("COMENTARIO_MULTILINEA", r"/\*.*?\*/", re.DOTALL),
     ("COMENTARIO_SIMPLE", r"//.*"),
-    ("NUMERO_REAL", r"[+-]?\d+\.\d+"),  # Primero los reales correctos
-    ("NUMERO_ENTERO", r"[+-]?\d+"),       # Luego enteros
+    #("NUMERO_REAL", r"[+-]?\d+\.\d+"),  # Primero los reales correctos
+    ("NUMERO_REAL", r"\d+\.\d+"),
+    ("NUMERO_ENTERO", r"\d+"),       # Luego enteros
     ("OPERADOR_ARIT", r"\+\+|--|\+|-|\*|/|%|\^"),
     ("OPERADOR_REL", r"<=|>=|==|!=|<|>"),
     ("OPERADOR_LOG", r"\&\&|\&|\|\||!"),
