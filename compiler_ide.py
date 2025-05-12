@@ -24,9 +24,9 @@ class CompilerIDE:
             "syntax": {
                 "NUMERO_ENTERO": "#e74c3c",      # Rojo para números enteros
                 "NUMERO_REAL": "#e74c3c",        # Rojo para números reales
-                "IDENTIFICADOR": "#9b59b6",      # Púrpura para identificadores
-                "COMENTARIO_SIMPLE": "#6A9955",  # Verde oscuro para comentarios simples
-                "COMENTARIO_MULTILINEA": "#6A9955", # Verde oscuro para comentarios multilinea
+                "IDENTIFICADOR": "#0000CD",      # Púrpura para identificadores
+                "COMENTARIO_SIMPLE": "#00FF00",  # Verde oscuro para comentarios simples
+                "COMENTARIO_MULTILINEA": "#00FF00", # Verde oscuro para comentarios multilinea
                 "RESERVADA": "#569CD6",          # Azul para palabras reservadas
                 "OPERADOR_ARIT": "#FF69B4",      # Rosa para operadores aritméticos
                 "OPERADOR_REL": "#BA55D3",       # Púrpura para operadores relacionales
