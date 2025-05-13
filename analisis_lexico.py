@@ -56,8 +56,7 @@ def tokenize(text):
                     if fin < length and text[fin] == '.':
                         if fin + 1 >= length or not text[fin + 1].isdigit():
                             linea, columna = calcular_linea_columna(text, fin)
-                            fragmento = text[pos:fin+1]
-                            errors.append(f"Línea {linea}, Columna {columna+1}: error en '{fragmento}', se esperaba un dígito después del punto")
+                            errors.append(f"Línea {linea}, Columna {columna+1}: error en '{text[fin]}', se esperaba un dígito después del punto")
                             pos = fin + 1
                             break
 
@@ -68,14 +67,17 @@ def tokenize(text):
                         siguiente = text[fin]
                         if siguiente.isalpha():
                             linea, columna = calcular_linea_columna(text, fin)
-                            fragmento = text[pos:fin+1]
-                            errors.append(f"Línea {linea}, Columna {columna+1}: error en '{fragmento}', después de un número real no se esperaba '{siguiente}'")
+                            errors.append(f"Línea {linea}, Columna {columna+1}: error en '{siguiente}', después de un número real no se esperaba '{siguiente}'")
                             pos = fin + 1
                             break
                         elif siguiente == '.':
-                            # Caso especial para punto intermedio como en 34.34.34
-                            linea, columna = calcular_linea_columna(text, fin)
-                            errors.append(f"Línea {linea}, Columna {columna+1}: carácter inválido '.' después de número real")
+                            # Se registra el número real correctamente
+                            linea, columna = calcular_linea_columna(text, pos)
+                            tokens.append((token_type, lexeme, linea, columna))
+                            
+                            # Y luego se reporta el error del punto adicional
+                            linea_punto, columna_punto = calcular_linea_columna(text, fin)
+                            errors.append(f"Línea {linea_punto}, Columna {columna_punto+1}: carácter inválido '.' después de número real")
                             pos = fin + 1
                             break
 
