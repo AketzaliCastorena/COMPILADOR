@@ -32,7 +32,7 @@ class CompilerIDE:
                 "OPERADOR_REL": "#BA55D3",       # Púrpura para operadores relacionales
                 "OPERADOR_LOG": "#BA55D3",       # Púrpura para operadores lógicos
                 "SIMBOLO": "#ff9800",            # Naranja para símbolos/puntuación
-                "CADENA": "#16a085"             # Verde azulado para cadenas
+                "CADENA": "#16a085"# Verde azulado para cadenas
             }
         }
 

@@ -13,7 +13,7 @@ TOKEN_REGEX = [
     ("NUMERO_ENTERO", r"\b[+-]?\d+\b"),
     ("IDENTIFICADOR", r"\b[a-zA-Z_][a-zA-Z0-9_]*\b"),
     ("ESPACIO", r"\s+"),
-    ("DESCONOCIDO", r"."),
+    ("DESCONOCIDO", r"."),  # Último catch-all
 ]
 
 def calcular_linea_columna(texto, index):
@@ -29,7 +29,7 @@ def tokenize(text):
     length = len(text)
 
     while pos < length:
-        # Manejo especial para ++ y -- incluso con saltos de línea
+        # Detectar ++ y -- con saltos de línea ignorados
         if text[pos] in ['+', '-']:
             symbol = text[pos]
             next_pos = pos + 1
@@ -50,33 +50,40 @@ def tokenize(text):
             if match:
                 lexeme = match.group(0)
 
-                # Validación de error 32.algo (número entero seguido de punto no válido)
+                # NUMERO_ENTERO seguido de '.' no válido
                 if token_type == "NUMERO_ENTERO":
                     fin = pos + len(lexeme)
                     if fin < length and text[fin] == '.':
                         if fin + 1 >= length or not text[fin + 1].isdigit():
-                            linea, columna = calcular_linea_columna(text, fin + 1)
-                            errors.append(f"Línea {linea}, Columna {columna}: se esperaba un dígito después del punto")
+                            linea, columna = calcular_linea_columna(text, fin)
+                            fragmento = text[pos:fin+1]
+                            errors.append(f"Línea {linea}, Columna {columna+1}: error en '{fragmento}', se esperaba un dígito después del punto")
                             pos = fin + 1
                             break
 
-                # Validación de número real mal formado
+                # NUMERO_REAL seguido de letra o punto incorrecto
                 if token_type == "NUMERO_REAL":
                     fin = pos + len(lexeme)
                     if fin < length:
                         siguiente = text[fin]
-                        if siguiente.isalpha() or siguiente == '.':
+                        if siguiente.isalpha():
                             linea, columna = calcular_linea_columna(text, fin)
-                            errors.append(f"Línea {linea}, Columna {columna}: después de un número real no se esperaba '{siguiente}'")
+                            fragmento = text[pos:fin+1]
+                            errors.append(f"Línea {linea}, Columna {columna+1}: error en '{fragmento}', después de un número real no se esperaba '{siguiente}'")
+                            pos = fin + 1
+                            break
+                        elif siguiente == '.':
+                            # Caso especial para punto intermedio como en 34.34.34
+                            linea, columna = calcular_linea_columna(text, fin)
+                            errors.append(f"Línea {linea}, Columna {columna+1}: carácter inválido '.' después de número real")
                             pos = fin + 1
                             break
 
-                # Ignorar espacios y comentarios para tokens, pero mantener errores
-                if token_type in ["COMENTARIO_SIMPLE", "COMENTARIO_MULTILINEA", "ESPACIO"]:
+                # Ignorar espacios y comentarios
+                if token_type in ["ESPACIO", "COMENTARIO_SIMPLE", "COMENTARIO_MULTILINEA"]:
                     pos = match.end()
                     break
 
-                # Si es desconocido, lo marcamos como error
                 if token_type == "DESCONOCIDO":
                     linea, columna = calcular_linea_columna(text, pos)
                     errors.append(f"Línea {linea}, Columna {columna}: carácter inválido '{lexeme}'")
