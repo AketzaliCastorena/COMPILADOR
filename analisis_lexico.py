@@ -3,7 +3,7 @@ import re
 TOKEN_REGEX = [
     ("COMENTARIO_MULTILINEA", r"/\*.*?\*/", re.DOTALL),
     ("COMENTARIO_SIMPLE", r"//.*"),
-    ("RESERVADA", r"\b(if|else|end|do|while|switch|case|int|float|main|cin|cout|then)\b"),
+    ("RESERVADA", r"\b(if|else|end|do|while|switch|case|int|float|main|cin|cout|then|repeat|read|write|until)\b"),
     ("OPERADOR_ARIT", r"\+\+|--|[+\-*/%^]"),
     ("OPERADOR_REL", r"<=|>=|==|!=|<|>"),
     ("OPERADOR_LOG", r"&&|\|\||!|&"),
