@@ -8,7 +8,7 @@ TOKEN_REGEX = [
     ("OPERADOR_REL", r"<=|>=|==|!=|<|>"),
     ("OPERADOR_LOG", r"&&|\|\||!|&"),
     ("ASIGNACION", r"=(?!=)"),
-    ("SIMBOLO", r"[(){}.,;]"),
+    ("SIMBOLO", r"[](){}.,;:;[]"),
     ("NUMERO_REAL", r"\b[+-]?\d+\.\d+\b"),
     ("NUMERO_ENTERO", r"\b[+-]?\d+\b"),
     ("IDENTIFICADOR", r"\b[a-zA-Z_][a-zA-Z0-9_]*\b"),
