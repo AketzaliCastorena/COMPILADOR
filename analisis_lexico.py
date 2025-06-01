@@ -54,7 +54,7 @@ def tokenize(text):
             if match:
                 lexeme = match.group(0)
 
-                # Validación: número entero seguido de un punto mal formado (ej. 5.)
+                # Validación: número entero seguido de un punto mal formado 
                 if token_type == "NUMERO_ENTERO":
                     fin = pos + len(lexeme)
                     if fin < length and text[fin] == '.':
