@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk, font
 from analisis_lexico import tokenize 
+from analisis_sintactico import AnalizadorSintactico, ASTNode, Token
 
 class CompilerIDE:
     def __init__(self, root):
@@ -500,10 +501,73 @@ class CompilerIDE:
     def syntax_analysis(self):
         self.syntactic_tab.winfo_children()[0].delete("1.0", tk.END)
         self.syntax_errors.winfo_children()[0].delete("1.0", tk.END)
-        
+
         self.status_label.config(text="Ejecutando análisis sintáctico...")
-        self.syntactic_tab.winfo_children()[0].insert(tk.END, "Ejecutando análisis sintáctico...\n")
-        self.tabs.select(1)  # Mostrar tab sintáctico
+        self.root.update()
+
+        try:
+            # Obtener tokens del análisis léxico
+            code = self.text_area.get("1.0", tk.END)
+            tokens, _ = tokenize(code)
+
+            # Crear lista de objetos Token
+            token_objs = [
+                Token(tipo, lexema, linea, columna) for (tipo, lexema, linea, columna) in tokens
+            ]
+
+            # Ejecutar análisis sintáctico
+            parser = AnalizadorSintactico(token_objs)
+            ast = parser.parse()
+            self.mostrar_arbol_sintactico(ast)
+
+            # Mostrar el árbol sintáctico de manera textual (por ahora)
+            def imprimir_ast(nodo, nivel=0):
+                indent = "  " * nivel
+                contenido = f"{indent}{nodo.tipo}"
+                if nodo.valor:
+                    contenido += f": {nodo.valor}"
+                contenido += "\n"
+                for hijo in nodo.hijos:
+                    contenido += imprimir_ast(hijo, nivel + 1)
+                return contenido
+
+            tree_text = imprimir_ast(ast)
+            self.syntactic_tab.winfo_children()[0].insert(tk.END, tree_text)
+
+            # Mostrar errores
+            if parser.errores:
+                for error in parser.errores:
+                    self.syntax_errors.winfo_children()[0].insert(tk.END, error + "\n", "error")
+            else:
+                self.syntax_errors.winfo_children()[0].insert(tk.END, "No se encontraron errores sintácticos.\n", "success")
+
+            self.syntax_errors.winfo_children()[0].tag_configure("error", foreground="#e74c3c")
+            self.syntax_errors.winfo_children()[0].tag_configure("success", foreground="#27ae60")
+
+            self.tabs.select(1)  # Mostrar tab sintáctico
+            self.status_label.config(text="Análisis sintáctico completado")
+
+        except Exception as e:
+            self.status_label.config(text=f"Error en análisis sintáctico: {str(e)}")
+            self.syntax_errors.winfo_children()[0].insert(tk.END, f"Error: {str(e)}\n", "error")
+
+    def mostrar_arbol_sintactico(self, nodo_raiz):
+        ventana = tk.Toplevel(self.root)
+        ventana.title("Árbol Sintáctico Abstracto (AST)")
+        ventana.geometry("500x600")
+
+        tree = ttk.Treeview(ventana)
+        tree.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
+
+        def insertar_nodo(treeview, parent, nodo):
+            texto = nodo.tipo
+            if nodo.valor:
+                texto += f": {nodo.valor}"
+            item_id = treeview.insert(parent, "end", text=texto)
+            for hijo in nodo.hijos:
+                insertar_nodo(treeview, item_id, hijo)
+
+        insertar_nodo(tree, "", nodo_raiz)
 
     def semantic_analysis(self):
         self.semantic_tab.winfo_children()[0].delete("1.0", tk.END)
