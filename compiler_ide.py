@@ -518,7 +518,7 @@ class CompilerIDE:
             # Ejecutar análisis sintáctico
             parser = AnalizadorSintactico(token_objs)
             ast = parser.parse()
-            self.mostrar_arbol_sintactico(ast)
+            #self.mostrar_arbol_sintactico(ast)
 
             # Mostrar el árbol sintáctico de manera textual (por ahora)
             def imprimir_ast(nodo, nivel=0):
