@@ -231,6 +231,7 @@ class AnalizadorSintactico:
             return nodo
         else:
             self.errores.append(f"Error en L{actual.linea} C{actual.columna}: Expresión no válida, se encontró '{actual.lexema}'")
+            self.sincronizar([';', ')'])  # ← agregar esta línea
             return None
 
     def parse_sent_out(self):
