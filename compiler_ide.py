@@ -499,7 +499,9 @@ class CompilerIDE:
         self.text_area.tag_configure("current_line", background=self.colors["highlight_line"])
 
     def syntax_analysis(self):
-        self.syntactic_tab.winfo_children()[0].delete("1.0", tk.END)
+        # Eliminar el widget de texto anterior en la pestaña sintáctica
+        for widget in self.syntactic_tab.winfo_children():
+            widget.destroy()
         self.syntax_errors.winfo_children()[0].delete("1.0", tk.END)
 
         self.status_label.config(text="Ejecutando análisis sintáctico...")
@@ -518,16 +520,57 @@ class CompilerIDE:
             # Ejecutar análisis sintáctico
             parser = AnalizadorSintactico(token_objs)
             ast = parser.parse()
-            #self.mostrar_arbol_sintactico(ast)
-
-            # Mostrar el árbol sintáctico de manera textual (por ahora)
-            def imprimir_ast(nodo, nivel=0):
-                indent = "  " * nivel
-                contenido = f"{indent}{nodo.tipo}"
+            
+            # Crear frame para el árbol sintáctico
+            tree_frame = tk.Frame(self.syntactic_tab)
+            tree_frame.pack(expand=True, fill=tk.BOTH, padx=5, pady=5)
+            
+            # Scrollbar vertical
+            vsb = ttk.Scrollbar(tree_frame, orient="vertical")
+            vsb.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            # Treeview con scrollbar
+            tree = ttk.Treeview(
+                tree_frame,
+                yscrollcommand=vsb.set,
+                selectmode="browse"
+            )
+            tree.pack(expand=True, fill=tk.BOTH)
+            
+            # Configurar scrollbar
+            vsb.config(command=tree.yview)
+            
+            # Configurar estilo para el árbol
+            style = ttk.Style()
+            style.configure("Treeview", 
+                           font=('Consolas', 10),
+                           rowheight=25,
+                           background="#ffffff",
+                           fieldbackground="#ffffff")
+            
+            # Configurar solo la columna principal
+            tree["columns"] = ("valor",)
+            tree.column("#0", width=300, minwidth=150, stretch=tk.YES)
+            tree.column("valor", width=150, minwidth=100)
+            
+            # Configurar encabezados
+            tree.heading("#0", text="Nodo", anchor=tk.W)
+            tree.heading("valor", text="Valor", anchor=tk.W)
+            
+            # Función recursiva para insertar nodos
+            def insertar_nodo(parent, nodo):
+                texto = nodo.tipo
                 if nodo.valor:
-                    contenido += f": {nodo.valor}"
-                contenido += "\n"
+                    texto += f": {nodo.valor}"
+                item_id = tree.insert(
+                    parent, 
+                    "end", 
+                    text=texto,
+                    values=(nodo.valor if nodo.valor else "",),
+                    open=False
+                )
                 for hijo in nodo.hijos:
+<<<<<<< HEAD
                     contenido += imprimir_ast(hijo, nivel + 1)
                 return contenido
 
@@ -535,6 +578,33 @@ class CompilerIDE:
             self.syntactic_tab.winfo_children()[0].insert(tk.END, tree_text)
             self.mostrar_arbol_sintactico(ast)
 
+=======
+                    insertar_nodo(item_id, hijo)
+            
+            # Insertar nodo raíz
+            insertar_nodo("", ast)
+            
+            # Botones para expandir/contraer
+            btn_frame = tk.Frame(self.syntactic_tab)
+            btn_frame.pack(fill=tk.X, padx=5, pady=5)
+            
+            def expandir_todo():
+                for item in tree.get_children():
+                    tree.item(item, open=True)
+                    expandir_hijos(item)
+            
+            def expandir_hijos(item):
+                for child in tree.get_children(item):
+                    tree.item(child, open=True)
+                    expandir_hijos(child)
+            
+            def contraer_todo():
+                for item in tree.get_children():
+                    tree.item(item, open=False)
+            
+            ttk.Button(btn_frame, text="Expandir Todo", command=expandir_todo).pack(side=tk.LEFT, padx=5)
+            ttk.Button(btn_frame, text="Contraer Todo", command=contraer_todo).pack(side=tk.LEFT, padx=5)
+>>>>>>> 56ea8e73075aadb9e84a07b298a9b09c8588262b
 
             # Mostrar errores
             if parser.errores:
