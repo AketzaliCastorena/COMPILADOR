@@ -570,15 +570,6 @@ class CompilerIDE:
                     open=False
                 )
                 for hijo in nodo.hijos:
-<<<<<<< HEAD
-                    contenido += imprimir_ast(hijo, nivel + 1)
-                return contenido
-
-            tree_text = imprimir_ast(ast)
-            self.syntactic_tab.winfo_children()[0].insert(tk.END, tree_text)
-            self.mostrar_arbol_sintactico(ast)
-
-=======
                     insertar_nodo(item_id, hijo)
             
             # Insertar nodo raíz
@@ -604,7 +595,6 @@ class CompilerIDE:
             
             ttk.Button(btn_frame, text="Expandir Todo", command=expandir_todo).pack(side=tk.LEFT, padx=5)
             ttk.Button(btn_frame, text="Contraer Todo", command=contraer_todo).pack(side=tk.LEFT, padx=5)
->>>>>>> 56ea8e73075aadb9e84a07b298a9b09c8588262b
 
             # Mostrar errores
             if parser.errores:
