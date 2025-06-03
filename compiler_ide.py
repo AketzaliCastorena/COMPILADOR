@@ -533,6 +533,8 @@ class CompilerIDE:
 
             tree_text = imprimir_ast(ast)
             self.syntactic_tab.winfo_children()[0].insert(tk.END, tree_text)
+            self.mostrar_arbol_sintactico(ast)
+
 
             # Mostrar errores
             if parser.errores:
