@@ -130,24 +130,7 @@ class AnalizadorSintactico:
         
         return None
 
-    def parse_declaracion_variable(self):
-        nodo = ASTNode("declaracion_variable")
-        tipo = self.coincidir("RESERVADA")
-        if tipo:
-            nodo.agregar_hijo(ASTNode("tipo", tipo.lexema))
-        
-        id_token = self.coincidir("IDENTIFICADOR")
-        if id_token:
-            nodo.agregar_hijo(ASTNode("id", id_token.lexema))
-        elif tipo:  # Solo reportar error si el tipo fue válido
-            self.errores.append(f"Error: Se esperaba un identificador después de '{tipo.lexema}'")
-        
-        semicolon = self.coincidir("SIMBOLO", ";")
-        if not semicolon and (tipo or id_token):
-            self.errores.append("Error: Falta ';' después de declaración de variable")
-        
-        return nodo if (tipo or id_token) else None
-
+   
     def parse_sentencia(self):
         actual = self.obtener_token()
         if actual is None:
@@ -200,59 +183,53 @@ class AnalizadorSintactico:
 
     def parse_expresion(self):
         nodo = ASTNode("expresion")
-        actual = self.obtener_token()
-        
-        if not actual:
-            self.errores.append("Error: Se esperaba una expresión")
+        izquierda = self.parse_expresion_simple()
+
+        if not izquierda:
             return None
-            
-        if actual.tipo in ["NUMERO_ENTERO", "NUMERO_REAL", "IDENTIFICADOR"]:
-            nodo.agregar_hijo(ASTNode(actual.tipo, actual.lexema))
-            self.index += 1
-            
-            # Manejar operadores binarios
-            while True:
-                actual = self.obtener_token()
-                if actual and actual.tipo in ["OPERADOR_ARIT", "OPERADOR_REL", "OPERADOR_LOG"]:
-                    operador = self.coincidir(actual.tipo)
-                    siguiente = self.obtener_token()
-                    
-                    if siguiente and siguiente.tipo in ["NUMERO_ENTERO", "NUMERO_REAL", "IDENTIFICADOR"]:
-                        nodo_operacion = ASTNode("operador", operador.lexema)
-                        nodo_operacion.agregar_hijo(nodo)
-                        nodo_operacion.agregar_hijo(ASTNode(siguiente.tipo, siguiente.lexema))
-                        self.index += 1
-                        nodo = nodo_operacion
-                    else:
-                        self.errores.append(f"Error: Operador '{operador.lexema}' sin operando derecho")
-                        break
-                else:
-                    break
+
+        token = self.obtener_token()
+        if token and token.tipo == "OPERADOR_REL":
+            operador = self.coincidir("OPERADOR_REL")
+            derecha = self.parse_expresion_simple()
+            if not derecha:
+                self.errores.append(f"Error: Se esperaba una expresión a la derecha del operador relacional '{operador.lexema}'")
+                return None
+            nodo_operador = ASTNode("rel_op", operador.lexema)
+            nodo_operador.agregar_hijo(izquierda)
+            nodo_operador.agregar_hijo(derecha)
+            nodo.agregar_hijo(nodo_operador)
             return nodo
         else:
-            self.errores.append(f"Error en L{actual.linea} C{actual.columna}: Expresión no válida, se encontró '{actual.lexema}'")
-            self.sincronizar([';', ')'])  # ← agregar esta línea
-            return None
+            nodo.agregar_hijo(izquierda)
+            return nodo
 
     def parse_sent_out(self):
         nodo = ASTNode("sent_out")
-        cout_token = self.coincidir("RESERVADA", "cout")
         
+        cout_token = self.coincidir("RESERVADA", "cout")
         if not cout_token:
             return None
-            
-        operador = self.coincidir("OPERADOR_REL", "<<")
-        if not operador:
-            self.errores.append("Error: Se esperaba '<<' después de 'cout'")
-            return nodo
         
-        valor = self.obtener_token()
-        if valor and valor.tipo in ["CADENA", "IDENTIFICADOR", "NUMERO_ENTERO", "NUMERO_REAL"]:
-            self.index += 1
-            nodo.agregar_hijo(ASTNode(valor.tipo, valor.lexema))
-        else:
-            self.errores.append("Error: Valor no válido en cout")
-        
+        while True:
+            operador = self.coincidir("OPERADOR_REL", "<<")
+            if not operador:
+                self.errores.append("Error: Se esperaba '<<' después de 'cout' o de una salida")
+                break
+
+            valor = self.obtener_token()
+            if valor and valor.tipo in ["CADENA", "IDENTIFICADOR", "NUMERO_ENTERO", "NUMERO_REAL"]:
+                self.index += 1
+                nodo.agregar_hijo(ASTNode(valor.tipo, valor.lexema))
+            else:
+                self.errores.append("Error: Valor no válido en cout después de '<<'")
+                break
+
+            # Mirar si sigue otro <<, si no, salimos
+            siguiente = self.obtener_token()
+            if not (siguiente and siguiente.tipo == "OPERADOR_REL" and siguiente.lexema == "<<"):
+                break
+
         semicolon = self.coincidir("SIMBOLO", ";")
         if not semicolon:
             self.errores.append("Error: Falta ';' al final de cout")
@@ -286,43 +263,46 @@ class AnalizadorSintactico:
     def parse_seleccion(self):
         nodo = ASTNode("seleccion")
         if_token = self.coincidir("RESERVADA", "if")
-        
+
         if not if_token:
             return None
-        
+
         paren_open = self.coincidir("SIMBOLO", "(")
         if not paren_open:
             self.errores.append("Error: Se esperaba '(' después de 'if'")
-        
+            self.sincronizar([")", "then"])
+
         nodo_cond = self.parse_expresion()
-        if nodo_cond:
-            nodo.agregar_hijo(nodo_cond)
-        else:
+        if not nodo_cond:
             self.errores.append("Error: Condición no válida en 'if'")
-        
+        else:
+            nodo.agregar_hijo(nodo_cond)
+
         paren_close = self.coincidir("SIMBOLO", ")")
         if not paren_close:
             self.errores.append("Error: Se esperaba ')' después de la condición del 'if'")
-        
+            self.sincronizar(["then"])
+
         then_token = self.coincidir("RESERVADA", "then")
         if not then_token:
             self.errores.append("Error: Se esperaba 'then' después de la condición del 'if'")
-        
-        sent_then = self.parse_sentencia()
+            self.sincronizar(["else", "end", "{", "if", "IDENTIFICADOR", "cin", "cout", "do", "while"])
+
+        sent_then = self.parse_bloque_sentencias()
         if sent_then:
             nodo.agregar_hijo(sent_then)
-        
-        # Verificar 'else' opcional
+
         if self.obtener_token() and self.obtener_token().lexema == "else":
             self.coincidir("RESERVADA", "else")
-            sent_else = self.parse_sentencia()
+            sent_else = self.parse_bloque_sentencias()
             if sent_else:
                 nodo.agregar_hijo(sent_else)
-        
+
         end_token = self.coincidir("RESERVADA", "end")
         if not end_token:
             self.errores.append("Error: Se esperaba 'end' al final de la estructura 'if'")
-        
+            self.sincronizar([";", "}"])
+
         return nodo
 
     def parse_do_while(self):
@@ -332,58 +312,215 @@ class AnalizadorSintactico:
         if not do_token:
             return None
         
-        sent = self.parse_sentencia()
+        sent = self.parse_bloque_sentencias()
         if sent:
             nodo.agregar_hijo(sent)
-        
+        else:
+            self.errores.append("Error: Cuerpo no válido en 'do'")
+
         while_token = self.coincidir("RESERVADA", "while")
         if not while_token:
             self.errores.append("Error: Se esperaba 'while' después del cuerpo de 'do'")
-        
+            self.sincronizar(["(", ";"])
+
         paren_open = self.coincidir("SIMBOLO", "(")
         if not paren_open:
             self.errores.append("Error: Se esperaba '(' después de 'while'")
-        
+            self.sincronizar([")"])
+
         cond = self.parse_expresion()
         if cond:
             nodo.agregar_hijo(cond)
         else:
             self.errores.append("Error: Condición no válida en 'do-while'")
-        
+            self.sincronizar([")"])
+
         paren_close = self.coincidir("SIMBOLO", ")")
         if not paren_close:
             self.errores.append("Error: Se esperaba ')' después de la condición del 'while'")
-        
+            self.sincronizar([";"])
+
         semicolon = self.coincidir("SIMBOLO", ";")
         if not semicolon:
             self.errores.append("Error: Falta ';' al final de 'do-while'")
-        
+
         return nodo
 
     def parse_while(self):
-        """Método adicional para manejar while simple"""
         nodo = ASTNode("while")
         while_token = self.coincidir("RESERVADA", "while")
-        
         if not while_token:
             return None
-        
+
         paren_open = self.coincidir("SIMBOLO", "(")
         if not paren_open:
             self.errores.append("Error: Se esperaba '(' después de 'while'")
-        
+            self.sincronizar([")", "{", "IDENTIFICADOR", "if", "do", "while", "cin", "cout"])
+
         cond = self.parse_expresion()
         if cond:
             nodo.agregar_hijo(cond)
         else:
             self.errores.append("Error: Condición no válida en 'while'")
-        
+            self.sincronizar([")"])
+
         paren_close = self.coincidir("SIMBOLO", ")")
         if not paren_close:
             self.errores.append("Error: Se esperaba ')' después de la condición del 'while'")
-        
-        sent = self.parse_sentencia()
+            self.sincronizar(["{", "if", "IDENTIFICADOR", "cin", "cout", "do", "while"])
+
+        sent = self.parse_bloque_sentencias()
         if sent:
             nodo.agregar_hijo(sent)
-        
+
         return nodo
+    
+    def parse_declaracion_variable(self):
+        nodo = ASTNode("declaracion_variable")
+        tipo = self.coincidir("RESERVADA")
+        if tipo:
+            nodo.agregar_hijo(ASTNode("tipo", tipo.lexema))
+        
+        # Soporte para lista de identificadores
+        id_token = self.coincidir("IDENTIFICADOR")
+        if id_token:
+            nodo_id = ASTNode("identificador")
+            nodo_id.agregar_hijo(ASTNode("id", id_token.lexema))
+            
+            # Aceptar múltiples identificadores separados por coma
+            while True:
+                coma = self.coincidir_opcional("SIMBOLO", ",")
+                if coma:
+                    siguiente_id = self.coincidir("IDENTIFICADOR")
+                    if siguiente_id:
+                        nodo_id.agregar_hijo(ASTNode("id", siguiente_id.lexema))
+                    else:
+                        self.errores.append("Error: Se esperaba un identificador después de ','")
+                        break
+                else:
+                    break
+            nodo.agregar_hijo(nodo_id)
+        else:
+            self.errores.append(f"Error: Se esperaba un identificador después de '{tipo.lexema}'" if tipo else "Error: Se esperaba un identificador")
+
+        # Punto y coma
+        semicolon = self.coincidir("SIMBOLO", ";")
+        if not semicolon:
+            self.errores.append("Error: Falta ';' después de declaración de variable")
+        
+        return nodo if tipo else None
+
+    def parse_expresion_simple(self):
+        nodo = self.parse_termino()
+        if not nodo:
+            return None
+
+        while True:
+            token = self.obtener_token()
+            if token and token.tipo == "OPERADOR_ARIT" and token.lexema in ["+", "-", "++", "--"]:
+                operador = self.coincidir("OPERADOR_ARIT")
+                derecho = self.parse_termino()
+                if not derecho:
+                    self.errores.append(f"Error: Operador '{operador.lexema}' sin operando derecho")
+                    break
+                nuevo = ASTNode("suma_op", operador.lexema)
+                nuevo.agregar_hijo(nodo)
+                nuevo.agregar_hijo(derecho)
+                nodo = nuevo
+            else:
+                break
+        return nodo
+
+    def parse_termino(self):
+        # Empezar con el primer factor
+        nodo = self.parse_factor()
+        if not nodo:
+            return None
+
+        # Procesar operadores de multiplicación y división de izquierda a derecha
+        while True:
+            token = self.obtener_token()
+            if token and token.tipo == "OPERADOR_ARIT" and token.lexema in ["*", "/", "%"]:
+                operador = self.coincidir("OPERADOR_ARIT")
+                derecho = self.parse_factor()
+                if not derecho:
+                    self.errores.append(f"Error: Operador '{operador.lexema}' sin operando derecho")
+                    break
+                
+                # CORRECCIÓN: Crear nuevo nodo y hacer que el nodo actual sea el hijo izquierdo
+                nuevo = ASTNode("mult_op", operador.lexema)
+                nuevo.agregar_hijo(nodo)        # El nodo actual se convierte en hijo izquierdo
+                nuevo.agregar_hijo(derecho)     # El nuevo operando es hijo derecho
+                nodo = nuevo                    # El nuevo nodo se convierte en el nodo actual
+            else:
+                break
+        return nodo
+
+    def parse_factor(self):
+        nodo = self.parse_componente()
+        if not nodo:
+            return None
+
+        while True:
+            token = self.obtener_token()
+            if token and token.tipo == "OPERADOR_ARIT" and token.lexema == "^":
+                operador = self.coincidir("OPERADOR_ARIT")
+                derecho = self.parse_componente()
+                if not derecho:
+                    self.errores.append("Error: Se esperaba el exponente después de '^'")
+                    break
+                nuevo = ASTNode("pot_op", operador.lexema)
+                nuevo.agregar_hijo(nodo)
+                nuevo.agregar_hijo(derecho)
+                nodo = nuevo
+            else:
+                break
+        return nodo
+
+    def parse_componente(self):
+        token = self.obtener_token()
+        if not token:
+            return None
+
+        if token.lexema == "(":
+            self.coincidir("SIMBOLO", "(")
+            nodo = self.parse_expresion()
+            if not self.coincidir("SIMBOLO", ")"):
+                self.errores.append("Error: Falta ')' después de la expresión")
+            return nodo
+
+        elif token.tipo in ["NUMERO_ENTERO", "NUMERO_REAL", "IDENTIFICADOR", "CADENA"]:
+            self.index += 1
+            return ASTNode(token.tipo, token.lexema)
+
+        elif token.tipo == "RESERVADA" and token.lexema in ["true", "false"]:
+            self.index += 1
+            return ASTNode("bool", token.lexema)
+
+        elif token.tipo == "OPERADOR_LOG" and token.lexema == "!":
+            operador = self.coincidir("OPERADOR_LOG", "!")
+            derecho = self.parse_componente()
+            if not derecho:
+                self.errores.append("Error: Falta operando después de '!'")
+                return None
+            nodo = ASTNode("op_logico", "!")
+            nodo.agregar_hijo(derecho)
+            return nodo
+
+        return None
+
+    def parse_bloque_sentencias(self):
+        # Verifica si comienza con '{'
+        if self.obtener_token() and self.obtener_token().lexema == "{":
+            self.coincidir("SIMBOLO", "{")
+            nodo_bloque = ASTNode("bloque")
+            while self.obtener_token() and self.obtener_token().lexema != "}":
+                sent = self.parse_sentencia()
+                if sent:
+                    nodo_bloque.agregar_hijo(sent)
+                else:
+                    self.index += 1  # intentar seguir adelante
+            self.coincidir("SIMBOLO", "}")
+            return nodo_bloque
+        else:
+            return self.parse_sentencia()
