@@ -133,10 +133,15 @@ class AnalizadorSintactico:
         actual = self.obtener_token()
         if actual is None:
             return None
-            
+
         try:
             if actual.tipo == "IDENTIFICADOR":
-                return self.parse_asignacion()
+                # Verifica si es un operador unario como sentencia
+                siguiente = self.tokens[self.index + 1] if self.index + 1 < len(self.tokens) else None
+                if siguiente and siguiente.tipo == "OPERADOR_ARIT" and siguiente.lexema in ["++", "--"]:
+                    return self.parse_sentencia_unaria()
+                else:
+                    return self.parse_asignacion()
             elif actual.lexema == "cout":
                 return self.parse_sent_out()
             elif actual.lexema == "cin":
@@ -153,6 +158,15 @@ class AnalizadorSintactico:
             return None
         
         return None
+
+    def parse_sentencia_unaria(self):
+        nodo = ASTNode("unario")
+        id_token = self.coincidir("IDENTIFICADOR")
+        op_token = self.coincidir("OPERADOR_ARIT")
+        nodo.agregar_hijo(ASTNode("id", id_token.lexema))
+        nodo.agregar_hijo(ASTNode("op", op_token.lexema))
+        self.coincidir_opcional("SIMBOLO", ";")
+        return nodo
 
     def parse_asignacion(self):
         nodo = ASTNode("asignacion")
@@ -186,38 +200,25 @@ class AnalizadorSintactico:
         return nodo
 
     def parse_expresion(self):
-        izquierda = self.parse_expresion_simple()
-        if not izquierda:
+        nodo = self.parse_expresion_simple()
+        if not nodo:
             return None
 
-        token = self.obtener_token()
-        # Operador relacional
-        if token and token.tipo == "OPERADOR_REL":
-            operador = self.coincidir("OPERADOR_REL")
-            derecha = self.parse_expresion_simple()
-            if not derecha:
-                self.errores.append(f"Error: Falta expresión después de operador '{operador.lexema}'")
-                return izquierda  # Retornar lo que tenemos
-            nodo_op = ASTNode("op_relacional", operador.lexema)
-            nodo_op.agregar_hijo(izquierda)
-            nodo_op.agregar_hijo(derecha)
-            return nodo_op
-
-        # Operador lógico (&&, ||)
-        elif token and token.tipo == "OPERADOR_LOG" and token.lexema in ["&&", "||"]:
-            operador = self.coincidir("OPERADOR_LOG")
-            derecha = self.parse_expresion()
-            if not derecha:
-                self.errores.append(f"Error: Falta expresión después de operador lógico '{operador.lexema}'")
-                return izquierda  # Retornar lo que tenemos
-            nodo_op = ASTNode("op_logico", operador.lexema)
-            nodo_op.agregar_hijo(izquierda)
-            nodo_op.agregar_hijo(derecha)
-            return nodo_op
-
-        # Solo la expresión simple
-        else:
-            return izquierda
+        while True:
+            token = self.obtener_token()
+            if token and token.tipo in ["OPERADOR_REL", "OPERADOR_LOG"]:
+                operador = self.coincidir(token.tipo)
+                derecho = self.parse_expresion_simple()
+                if not derecho:
+                    self.errores.append(f"Error: Falta expresión después de operador '{operador.lexema}'")
+                    break
+                nuevo = ASTNode("op", operador.lexema)
+                nuevo.agregar_hijo(nodo)
+                nuevo.agregar_hijo(derecho)
+                nodo = nuevo
+            else:
+                break
+        return nodo
 
     def parse_sent_out(self):
         nodo = ASTNode("sent_out")
@@ -287,75 +288,45 @@ class AnalizadorSintactico:
         if not if_token:
             return None
 
-        # Paréntesis opcionales
-        has_paren = False
-        if self.obtener_token() and self.obtener_token().lexema == "(":
-            self.coincidir("SIMBOLO", "(")
-            has_paren = True
+        # Forzar uso de paréntesis
+        if not self.coincidir("SIMBOLO", "("):
+            self.errores.append("Error: Se esperaba '(' después de 'if'")
+            return None
 
         nodo_cond = self.parse_expresion()
         if not nodo_cond:
             self.errores.append("Error: Condición no válida en 'if'")
-        else:
-            nodo.agregar_hijo(nodo_cond)
+            return None
 
-        if has_paren:
-            if not self.coincidir_opcional("SIMBOLO", ")"):
-                self.errores.append("Error: Falta ')' después de la condición del 'if'")
+        if not self.coincidir("SIMBOLO", ")"):
+            self.errores.append("Error: Se esperaba ')' después de la condición del 'if'")
+            return None
 
-        then_token = self.coincidir_opcional("RESERVADA", "then")
-        if not then_token:
-            # Ser más permisivo con 'then'
-            pass
+        if not self.obtener_token() or self.obtener_token().lexema != "{":
+            self.errores.append("Error: Se esperaba '{' después de la condición del 'if'")
+            return None
 
-        # Parsear el bloque THEN
+        nodo.agregar_hijo(nodo_cond)
+
         sent_then = self.parse_bloque_sentencias()
-        if sent_then and sent_then.hijos:  # Solo agregar si tiene contenido
+        if sent_then and sent_then.hijos:
             nodo.agregar_hijo(sent_then)
+        else:
+            self.errores.append("Error: Se esperaba un bloque '{...}' después del 'if'")
 
-        # Manejar ELSE opcional
+        # Manejar ELSE opcional con llave
         if self.obtener_token() and self.obtener_token().lexema == "else":
             self.coincidir("RESERVADA", "else")
+
+            if not self.obtener_token() or self.obtener_token().lexema != "{":
+                self.errores.append("Error: Se esperaba '{' después de 'else'")
+                return nodo
+
             sent_else = self.parse_bloque_sentencias()
-            if sent_else and sent_else.hijos:  # Solo agregar si tiene contenido
+            if sent_else and sent_else.hijos:
                 nodo.agregar_hijo(sent_else)
-
-        # END opcional para mayor flexibilidad
-        end_token = self.coincidir_opcional("RESERVADA", "end")
-
-        return nodo
-
-    def parse_do_while(self):
-        nodo = ASTNode("do_while")
-        do_token = self.coincidir("RESERVADA", "do")
-        
-        if not do_token:
-            return None
-        
-        sent = self.parse_bloque_sentencias()
-        if sent:
-            nodo.agregar_hijo(sent)
-
-        while_token = self.coincidir_opcional("RESERVADA", "while")
-        if not while_token:
-            self.errores.append("Error: Se esperaba 'while' después del cuerpo de 'do'")
-            return nodo
-
-        paren_open = self.coincidir_opcional("SIMBOLO", "(")
-        if not paren_open:
-            self.errores.append("Error: Se esperaba '(' después de 'while'")
-
-        cond = self.parse_expresion()
-        if cond:
-            nodo.agregar_hijo(cond)
-        else:
-            self.errores.append("Error: Condición no válida en 'do-while'")
-
-        paren_close = self.coincidir_opcional("SIMBOLO", ")")
-        if not paren_close:
-            self.errores.append("Error: Se esperaba ')' después de la condición del 'while'")
-
-        semicolon = self.coincidir_opcional("SIMBOLO", ";")
+            else:
+                self.errores.append("Error: Se esperaba un bloque '{...}' después del 'else'")
 
         return nodo
 
@@ -370,7 +341,70 @@ class AnalizadorSintactico:
             self.errores.append("Error: Se esperaba '(' después de 'while'")
 
         cond = self.parse_expresion()
+        if cond: 
+            nodo.agregar_hijo(cond)
+        else:
+            self.errores.append("Error: Condición no válida en 'while'")
+
+        paren_close = self.coincidir_opcional("SIMBOLO", ")")
+        if not paren_close:
+            self.errores.append("Error: Se esperaba ')' después de la condición del 'while'")
+
+        sent = self.parse_bloque_sentencias()
+        if sent:
+            nodo.agregar_hijo(sent)
+
+        return nodo
+    
+    def parse_do_while(self):
+        nodo = ASTNode("do_while")
+        do_token = self.coincidir("RESERVADA", "do")
+        if not do_token:
+            return None
+
+        bloque = self.parse_bloque_sentencias()
+        if bloque:
+            nodo.agregar_hijo(bloque)
+        else:
+            self.errores.append("Error: Se esperaba un bloque '{...}' después de 'do'")
+            return nodo
+
+        if not self.coincidir("RESERVADA", "while"):
+            self.errores.append("Error: Se esperaba 'while' después del bloque 'do'")
+            return nodo
+
+        if not self.coincidir("SIMBOLO", "("):
+            self.errores.append("Error: Se esperaba '(' después de 'while'")
+            return nodo
+
+        cond = self.parse_expresion()
         if cond:
+            nodo.agregar_hijo(cond)
+        else:
+            self.errores.append("Error: Condición no válida en 'do-while'")
+
+        if not self.coincidir("SIMBOLO", ")"):
+            self.errores.append("Error: Se esperaba ')' después de la condición del 'while'")
+
+        if not self.coincidir("SIMBOLO", ";"):
+            self.errores.append("Error: Se esperaba ';' al final de 'do-while'")
+
+        return nodo
+
+
+
+    def parse_while(self):
+        nodo = ASTNode("while")
+        while_token = self.coincidir("RESERVADA", "while")
+        if not while_token:
+            return None
+
+        paren_open = self.coincidir_opcional("SIMBOLO", "(")
+        if not paren_open:
+            self.errores.append("Error: Se esperaba '(' después de 'while'")
+
+        cond = self.parse_expresion()
+        if cond: 
             nodo.agregar_hijo(cond)
         else:
             self.errores.append("Error: Condición no válida en 'while'")

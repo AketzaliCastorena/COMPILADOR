@@ -6,7 +6,7 @@ TOKEN_REGEX = [
     ("COMENTARIO_SIMPLE", r"//.*"),                     # Comentarios tipo //
     ("RESERVADA", r"\b(if|else|end|do|while|switch|case|int|float|main|cin|cout|then|repeat|read|write|until|true|false)\b"),
     ("OPERADOR_ARIT", r"\+\+|--|[+\-*/%^]"),             # Operadores aritméticos
-    ("OPERADOR_REL", r"<=|>=|==|!=|<|>"),                # Operadores relacionales
+    ("OPERADOR_REL", r"<<|>>|<=|>=|==|!=|<|>"),          # << y >> primero
     ("OPERADOR_LOG", r"&&|\|\||!|&"),                    # Operadores lógicos
     ("ASIGNACION", r"=(?!=)"),                           # Operador de asignación
     ("SIMBOLO", r"[](){}.,;:;[]"),                       # Símbolos comunes
