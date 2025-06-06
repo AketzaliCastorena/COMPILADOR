@@ -549,13 +549,17 @@ class CompilerIDE:
                            fieldbackground="#ffffff")
             
             # Configurar solo la columna principal
-            tree["columns"] = ("valor",)
-            tree.column("#0", width=300, minwidth=150, stretch=tk.YES)
-            tree.column("valor", width=150, minwidth=100)
+            tree["columns"] = ("valor", "linea", "columna")
+            tree.column("#0", width=250, minwidth=150, stretch=tk.YES)
+            tree.column("valor", width=150, anchor=tk.W)
+            tree.column("linea", width=80, anchor=tk.CENTER)
+            tree.column("columna", width=80, anchor=tk.CENTER)
             
             # Configurar encabezados
             tree.heading("#0", text="Nodo", anchor=tk.W)
             tree.heading("valor", text="Valor", anchor=tk.W)
+            tree.heading("linea", text="Línea", anchor=tk.CENTER)
+            tree.heading("columna", text="Columna", anchor=tk.CENTER)
             
             # Función recursiva para insertar nodos
             def insertar_nodo(parent, nodo):
@@ -563,10 +567,14 @@ class CompilerIDE:
                 if nodo.valor:
                     texto += f": {nodo.valor}"
                 item_id = tree.insert(
-                    parent, 
-                    "end", 
+                    parent,
+                    "end",
                     text=texto,
-                    values=(nodo.valor if nodo.valor else "",),
+                    values=(
+                        nodo.valor if nodo.valor else "",
+                        nodo.linea if nodo.linea is not None else "",
+                        nodo.columna if nodo.columna is not None else ""
+                    ),
                     open=False
                 )
                 for hijo in nodo.hijos:
