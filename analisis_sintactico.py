@@ -177,7 +177,6 @@ class AnalizadorSintactico:
     def parse_asignacion(self):
         nodo = ASTNode("asignacion")
         id_token = self.coincidir("IDENTIFICADOR")
-        
         if not id_token:
             return None
 
@@ -185,23 +184,21 @@ class AnalizadorSintactico:
 
         asign_token = self.coincidir_opcional("ASIGNACION")
         if not asign_token:
-            # Intentar con operador de asignación como símbolo
             asign_token = self.coincidir_opcional("SIMBOLO", "=")
-        
         if not asign_token:
             self.errores.append(f"Error en L{id_token.linea} C{id_token.columna + len(id_token.lexema)}: Se esperaba '=' después del identificador '{id_token.lexema}'")
             return nodo
-        
+
         expr = self.parse_expresion()
         if expr:
             nodo.agregar_hijo(expr)
         else:
             self.errores.append(f"Error: Expresión no válida en asignación de '{id_token.lexema}'")
 
-        semicolon = self.coincidir_opcional("SIMBOLO", ";")
-        if not semicolon:
+        # Cambia aquí:
+        if not self.coincidir("SIMBOLO", ";"):
             self.errores.append("Error: Falta ';' al final de la sentencia")
-        
+
         return nodo
 
     def parse_expresion(self):
@@ -417,8 +414,6 @@ class AnalizadorSintactico:
         id_token = self.coincidir("IDENTIFICADOR")
         if id_token:
             nodo_ids.agregar_hijo(ASTNode("id", id_token.lexema, id_token.linea, id_token.columna))
-            
-            # Múltiples identificadores separados por coma
             while True:
                 coma = self.coincidir_opcional("SIMBOLO", ",")
                 if coma:
@@ -434,10 +429,10 @@ class AnalizadorSintactico:
         else:
             self.errores.append(f"Error: Se esperaba un identificador después de '{tipo.lexema}'")
 
-        # Punto y coma opcional
-        semicolon = self.coincidir_opcional("SIMBOLO", ";")
-        
-        return nodo
+        # Punto y coma obligatorio
+        if not self.coincidir("SIMBOLO", ";"):
+            self.errores.append("Error: Falta ';' al final de la declaración de variable")
+        return nodo  # <-- asegúrate que este return esté dentro de la función, no fuera
 
     def parse_expresion_simple(self):
         nodo = self.parse_termino()
