@@ -1,0 +1,43 @@
+main {
+    // Declaración de variables
+    int x, y, z;
+    float resultado;
+    bool flag;
+    
+    // Asignaciones
+    x = 10;
+    y = 20;
+    z = x + y;
+    resultado = 3.14;
+    flag = true;
+    
+    // Entrada/Salida
+    cout << "Ingrese un valor";
+    cin >> x;
+    cout << "El valor es" << x;
+    
+    // Estructura de control if
+    if (x > 10) {
+        cout << "Mayor que 10";
+        y = x + 5;
+    } else {
+        cout << "Menor o igual a 10";
+        y = x - 5;
+    }
+    
+    // Estructura while
+    while (z < 100) {
+        z = z + 1;
+        cout << z;
+    }
+    
+    // Estructura do-while
+    do {
+        x = x - 1;
+    } while (x > 0);
+    
+    // Operaciones aritméticas
+    resultado = x * y + z / 2;
+    x++;
+    y--;
+}

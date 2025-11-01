@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk, font
 from analisis_lexico import tokenize 
 from analisis_sintactico import AnalizadorSintactico, ASTNode, Token
+from analisis_semantico import AnalizadorSemantico
 
 class CompilerIDE:
     def __init__(self, root):
@@ -642,45 +643,328 @@ class CompilerIDE:
     def semantic_analysis(self):
         self.semantic_tab.winfo_children()[0].delete("1.0", tk.END)
         self.semantic_errors.winfo_children()[0].delete("1.0", tk.END)
+        self.hash_table_tab.winfo_children()[0].delete("1.0", tk.END)
+        self.intermediate_code_tab.winfo_children()[0].delete("1.0", tk.END)
         
         self.status_label.config(text="Ejecutando análisis semántico...")
-        self.semantic_tab.winfo_children()[0].insert(tk.END, "Ejecutando análisis semántico...\n")
-        self.tabs.select(2)  # Mostrar tab semántico
+        self.root.update()
+        
+        try:
+            # Obtener tokens del análisis léxico
+            code = self.text_area.get("1.0", tk.END)
+            tokens, _ = tokenize(code)
+            
+            # Crear lista de objetos Token
+            token_objs = [
+                Token(tipo, lexema, linea, columna) for (tipo, lexema, linea, columna) in tokens
+            ]
+            
+            # Ejecutar análisis sintáctico
+            parser = AnalizadorSintactico(token_objs)
+            ast = parser.parse()
+            
+            # Verificar si hay errores sintácticos
+            if parser.errores:
+                self.semantic_errors.winfo_children()[0].insert(
+                    tk.END, 
+                    "⚠️ Advertencia: Existen errores sintácticos. El análisis semántico puede ser incompleto.\n\n",
+                    "warning"
+                )
+            
+            # Ejecutar análisis semántico
+            analizador = AnalizadorSemantico(ast)
+            tabla_simbolos, errores, advertencias, codigo_intermedio, semantico_detalle = analizador.analizar()
+            
+            # Mostrar tabla semántica detallada con mejor formato
+            text_sem = self.semantic_tab.winfo_children()[0]
+            header = f"{'NODO':<22}{'TIPO SEMÁNTICO':<18}{'VALOR':<18}{'LÍNEA':<8}{'COL':<6}\n"
+            text_sem.insert(tk.END, header, "table_header")
+            text_sem.insert(tk.END, "-"*72 + "\n", "separator")
+            for info in semantico_detalle:
+                nodo = str(info['nodo']) if info['nodo'] is not None else ''
+                tipo_sem = str(info['tipo_semantico']) if info['tipo_semantico'] is not None else ''
+                valor = str(info['valor']) if info['valor'] is not None else ''
+                linea = str(info['linea']) if info['linea'] is not None else ''
+                columna = str(info['columna']) if info['columna'] is not None else ''
+                fila = f"{nodo:<22}{tipo_sem:<18}{valor:<18}{linea:<8}{columna:<6}\n"
+                text_sem.insert(tk.END, fila)
+            text_sem.insert(tk.END, "\n" + "="*72 + "\n", "separator")
+            
+            # Mostrar análisis semántico resumido
+            text_sem.insert(tk.END, "✓ ANÁLISIS SEMÁNTICO COMPLETADO\n\n", "title")
+            text_sem.insert(tk.END, f"📊 Símbolos encontrados: {len(tabla_simbolos.obtener_simbolos())}\n", "info")
+            text_sem.insert(tk.END, f"❌ Errores semánticos: {len(errores)}\n", "error" if errores else "success")
+            text_sem.insert(tk.END, f"⚠️  Advertencias: {len(advertencias)}\n", "warning" if advertencias else "success")
+            text_sem.insert(tk.END, f"📝 Instrucciones generadas: {len(codigo_intermedio)}\n\n", "info")
+            
+            if errores or advertencias:
+                text_sem.insert(tk.END, "Detalles:\n", "subtitle")
+                text_sem.insert(tk.END, "-" * 80 + "\n\n", "separator")
+            
+            # Configurar estilos
+            text_sem.tag_configure("table_header", foreground="#3498db", font=("Consolas", 10, "bold"))
+            text_sem.tag_configure("separator", foreground="#95a5a6")
+            text_sem.tag_configure("title", foreground="#27ae60", font=("Consolas", 12, "bold"))
+            text_sem.tag_configure("subtitle", foreground="#2c3e50", font=("Consolas", 11, "bold"))
+            text_sem.tag_configure("info", foreground="#3498db")
+            text_sem.tag_configure("success", foreground="#27ae60")
+            text_sem.tag_configure("error", foreground="#e74c3c")
+            text_sem.tag_configure("warning", foreground="#f39c12")
+            
+            # Mostrar tabla de símbolos
+            text_tabla = self.hash_table_tab.winfo_children()[0]
+            text_tabla.insert(tk.END, "=" * 130 + "\n", "header")
+            text_tabla.insert(tk.END, "TABLA DE SÍMBOLOS (Hash Table)\n", "header")
+            text_tabla.insert(tk.END, "=" * 130 + "\n\n", "header")
+            
+            simbolos_visuales = tabla_simbolos.obtener_tabla_visual()
+            
+            if simbolos_visuales:
+                # Encabezados
+                header = f"{'Identificador':<20} {'Registro':<12} {'Valor':<20} {'Tipo de dato':<15} {'Ámbito':<12} {'Núm. de Línea':<60}\n"
+                text_tabla.insert(tk.END, header, "table_header")
+                text_tabla.insert(tk.END, "-" * 130 + "\n", "separator")
+                
+                # Datos
+                for simbolo in simbolos_visuales:
+                    identificador = str(simbolo['identificador']) if simbolo['identificador'] else ''
+                    registro = str(simbolo['registro']) if simbolo['registro'] is not None else ''
+                    valor = str(simbolo['valor']) if simbolo['valor'] else ''
+                    tipo_dato = str(simbolo['tipo_dato']) if simbolo['tipo_dato'] else ''
+                    ambito = str(simbolo['ambito']) if simbolo['ambito'] else ''
+                    lineas = str(simbolo['lineas']) if simbolo['lineas'] else ''
+                    
+                    fila = (
+                        f"{identificador:<20} "
+                        f"{registro:<12} "
+                        f"{valor:<20} "
+                        f"{tipo_dato:<15} "
+                        f"{ambito:<12} "
+                        f"{lineas:<60}\n"
+                    )
+                    text_tabla.insert(tk.END, fila)
+                
+                text_tabla.insert(tk.END, "\n" + "=" * 130 + "\n", "separator")
+                text_tabla.insert(tk.END, f"Total de símbolos: {len(simbolos_visuales)}\n", "info")
+            else:
+                text_tabla.insert(tk.END, "No se encontraron símbolos en el programa.\n", "info")
+            
+            # Configurar estilos para tabla de símbolos
+            text_tabla.tag_configure("header", foreground="#2c3e50", font=("Consolas", 11, "bold"))
+            text_tabla.tag_configure("table_header", foreground="#3498db", font=("Consolas", 10, "bold"))
+            text_tabla.tag_configure("separator", foreground="#95a5a6")
+            text_tabla.tag_configure("info", foreground="#27ae60", font=("Consolas", 10, "bold"))
+            
+            # Mostrar código intermedio
+            text_codigo = self.intermediate_code_tab.winfo_children()[0]
+            text_codigo.insert(tk.END, "=" * 80 + "\n", "header")
+            text_codigo.insert(tk.END, "CÓDIGO INTERMEDIO (Tres Direcciones)\n", "header")
+            text_codigo.insert(tk.END, "=" * 80 + "\n\n", "header")
+            
+            if codigo_intermedio:
+                for i, instruccion in enumerate(codigo_intermedio, 1):
+                    text_codigo.insert(tk.END, f"{i:3d}:  {instruccion}\n")
+                text_codigo.insert(tk.END, "\n" + "=" * 80 + "\n", "separator")
+                text_codigo.insert(tk.END, f"Total de instrucciones: {len(codigo_intermedio)}\n", "info")
+            else:
+                text_codigo.insert(tk.END, "No se generó código intermedio.\n", "info")
+            
+            # Configurar estilos
+            text_codigo.tag_configure("header", foreground="#2c3e50", font=("Consolas", 11, "bold"))
+            text_codigo.tag_configure("separator", foreground="#95a5a6")
+            text_codigo.tag_configure("info", foreground="#27ae60", font=("Consolas", 10, "bold"))
+            
+            # Mostrar errores semánticos
+            text_errores = self.semantic_errors.winfo_children()[0]
+            if errores:
+                text_errores.insert(tk.END, "ERRORES SEMÁNTICOS:\n", "header")
+                text_errores.insert(tk.END, "=" * 80 + "\n\n", "separator")
+                for error in errores:
+                    text_errores.insert(tk.END, f"❌ {error}\n\n", "error")
+            else:
+                text_errores.insert(tk.END, "✓ No se encontraron errores semánticos.\n", "success")
+            
+            # Mostrar advertencias
+            if advertencias:
+                text_errores.insert(tk.END, "\n" + "=" * 80 + "\n", "separator")
+                text_errores.insert(tk.END, "ADVERTENCIAS:\n", "header")
+                text_errores.insert(tk.END, "=" * 80 + "\n\n", "separator")
+                for advertencia in advertencias:
+                    text_errores.insert(tk.END, f"⚠️  {advertencia}\n\n", "warning")
+            
+            # Configurar estilos
+            text_errores.tag_configure("header", foreground="#2c3e50", font=("Consolas", 11, "bold"))
+            text_errores.tag_configure("error", foreground="#e74c3c")
+            text_errores.tag_configure("warning", foreground="#f39c12")
+            text_errores.tag_configure("success", foreground="#27ae60", font=("Consolas", 11, "bold"))
+            text_errores.tag_configure("separator", foreground="#95a5a6")
+            
+            self.tabs.select(2)  # Mostrar tab semántico
+            self.status_label.config(text="Análisis semántico completado")
+            
+        except Exception as e:
+            self.status_label.config(text=f"Error en análisis semántico: {str(e)}")
+            text_error = self.semantic_errors.winfo_children()[0]
+            text_error.insert(tk.END, f"Error crítico al realizar análisis semántico:\n{str(e)}\n", "error")
+            text_error.tag_configure("error", foreground="#e74c3c")
 
     def execute_code(self):
         self.results.winfo_children()[0].delete("1.0", tk.END)
         self.status_label.config(text="Compilando el código...")
         
+        text_result = self.results.winfo_children()[0]
+        
         # Ventana de compilación con estilo
         compile_window = tk.Toplevel(self.root)
         compile_window.title("Compilando")
-        compile_window.geometry("300x150")
+        compile_window.geometry("400x250")
         compile_window.resizable(False, False)
         compile_window.grab_set()  # Hacer modal
         
         # Centrar la ventana
-        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (300 // 2)
-        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (150 // 2)
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (400 // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (250 // 2)
         compile_window.geometry(f"+{x}+{y}")
         
         # Contenido
         frame = tk.Frame(compile_window, bg="white", padx=20, pady=20)
         frame.pack(fill=tk.BOTH, expand=True)
         
-        tk.Label(frame, text="Compilando el código...", font=("Arial", 12), bg="white").pack(pady=(0, 15))
+        title = tk.Label(frame, text="Compilación Completa", font=("Arial", 14, "bold"), bg="white")
+        title.pack(pady=(0, 15))
+        
+        status_label = tk.Label(frame, text="Iniciando compilación...", font=("Arial", 11), bg="white")
+        status_label.pack(pady=5)
         
         # Barra de progreso
-        progress = ttk.Progressbar(frame, mode='indeterminate', length=200)
-        progress.pack(pady=10)
+        progress = ttk.Progressbar(frame, mode='indeterminate', length=300)
+        progress.pack(pady=15)
         progress.start(10)
         
-        # Botón para cerrar
-        tk.Button(frame, text="Cerrar", command=compile_window.destroy, 
-                bg=self.colors["accent"], fg="white", relief=tk.FLAT, padx=10).pack(pady=10)
+        # Frame para resultados
+        result_frame = tk.Frame(frame, bg="white")
+        result_frame.pack(pady=10)
         
-        # Resultado
-        self.results.winfo_children()[0].insert(tk.END, "Compilación en proceso...\n")
-        self.error_tabs.select(3)  # Mostrar tab de resultados
+        def actualizar_estado(fase, exito):
+            simbolo = "✓" if exito else "✗"
+            color = "#27ae60" if exito else "#e74c3c"
+            label = tk.Label(result_frame, text=f"{simbolo} {fase}", 
+                           font=("Arial", 10), bg="white", fg=color)
+            label.pack(anchor="w")
+            compile_window.update()
+        
+        try:
+            # Fase 1: Análisis Léxico
+            status_label.config(text="Fase 1: Análisis Léxico...")
+            compile_window.update()
+            
+            code = self.text_area.get("1.0", tk.END)
+            tokens, lex_errors = tokenize(code)
+            
+            actualizar_estado("Análisis Léxico", len(lex_errors) == 0)
+            text_result.insert(tk.END, "═" * 80 + "\n", "header")
+            text_result.insert(tk.END, "FASE 1: ANÁLISIS LÉXICO\n", "header")
+            text_result.insert(tk.END, "═" * 80 + "\n", "header")
+            text_result.insert(tk.END, f"Tokens encontrados: {len(tokens)}\n", "info")
+            text_result.insert(tk.END, f"Errores léxicos: {len(lex_errors)}\n\n", 
+                             "error" if lex_errors else "success")
+            
+            if lex_errors:
+                for error in lex_errors[:5]:  # Mostrar solo los primeros 5
+                    text_result.insert(tk.END, f"  ❌ {error}\n", "error")
+                if len(lex_errors) > 5:
+                    text_result.insert(tk.END, f"  ... y {len(lex_errors) - 5} errores más\n", "error")
+                text_result.insert(tk.END, "\n⚠️ Compilación detenida por errores léxicos.\n", "warning")
+                progress.stop()
+                return
+            
+            # Fase 2: Análisis Sintáctico
+            status_label.config(text="Fase 2: Análisis Sintáctico...")
+            compile_window.update()
+            
+            token_objs = [Token(tipo, lexema, linea, columna) for (tipo, lexema, linea, columna) in tokens]
+            parser = AnalizadorSintactico(token_objs)
+            ast = parser.parse()
+            
+            actualizar_estado("Análisis Sintáctico", len(parser.errores) == 0)
+            text_result.insert(tk.END, "═" * 80 + "\n", "header")
+            text_result.insert(tk.END, "FASE 2: ANÁLISIS SINTÁCTICO\n", "header")
+            text_result.insert(tk.END, "═" * 80 + "\n", "header")
+            text_result.insert(tk.END, f"Errores sintácticos: {len(parser.errores)}\n\n", 
+                             "error" if parser.errores else "success")
+            
+            if parser.errores:
+                for error in parser.errores[:5]:
+                    text_result.insert(tk.END, f"  ❌ {error}\n", "error")
+                if len(parser.errores) > 5:
+                    text_result.insert(tk.END, f"  ... y {len(parser.errores) - 5} errores más\n", "error")
+                text_result.insert(tk.END, "\n⚠️ Compilación detenida por errores sintácticos.\n", "warning")
+                progress.stop()
+                return
+            
+            # Fase 3: Análisis Semántico
+            status_label.config(text="Fase 3: Análisis Semántico...")
+            compile_window.update()
+            
+            analizador = AnalizadorSemantico(ast)
+            tabla_simbolos, sem_errors, advertencias, codigo_intermedio = analizador.analizar()
+            
+            actualizar_estado("Análisis Semántico", len(sem_errors) == 0)
+            text_result.insert(tk.END, "═" * 80 + "\n", "header")
+            text_result.insert(tk.END, "FASE 3: ANÁLISIS SEMÁNTICO\n", "header")
+            text_result.insert(tk.END, "═" * 80 + "\n", "header")
+            text_result.insert(tk.END, f"Símbolos declarados: {len(tabla_simbolos.obtener_simbolos())}\n", "info")
+            text_result.insert(tk.END, f"Errores semánticos: {len(sem_errors)}\n", 
+                             "error" if sem_errors else "success")
+            text_result.insert(tk.END, f"Advertencias: {len(advertencias)}\n\n", 
+                             "warning" if advertencias else "success")
+            
+            if sem_errors:
+                for error in sem_errors[:5]:
+                    text_result.insert(tk.END, f"  ❌ {error}\n", "error")
+                if len(sem_errors) > 5:
+                    text_result.insert(tk.END, f"  ... y {len(sem_errors) - 5} errores más\n", "error")
+                text_result.insert(tk.END, "\n⚠️ Compilación completada con errores.\n", "warning")
+            else:
+                text_result.insert(tk.END, "═" * 80 + "\n", "header")
+                text_result.insert(tk.END, "✓ COMPILACIÓN EXITOSA\n", "success_big")
+                text_result.insert(tk.END, "═" * 80 + "\n", "header")
+                text_result.insert(tk.END, f"\n📝 Código intermedio generado: {len(codigo_intermedio)} instrucciones\n", "info")
+                text_result.insert(tk.END, f"📊 Variables en tabla de símbolos: {len(tabla_simbolos.obtener_simbolos())}\n", "info")
+                
+                if advertencias:
+                    text_result.insert(tk.END, f"\n⚠️ Se generaron {len(advertencias)} advertencias (ver pestaña de errores semánticos)\n", "warning")
+            
+            # Configurar estilos
+            text_result.tag_configure("header", foreground="#2c3e50", font=("Consolas", 11, "bold"))
+            text_result.tag_configure("success_big", foreground="#27ae60", font=("Consolas", 14, "bold"))
+            text_result.tag_configure("info", foreground="#3498db")
+            text_result.tag_configure("success", foreground="#27ae60")
+            text_result.tag_configure("error", foreground="#e74c3c")
+            text_result.tag_configure("warning", foreground="#f39c12")
+            
+            progress.stop()
+            status_label.config(text="Compilación completada")
+            
+            # Botón para cerrar
+            btn_close = tk.Button(frame, text="Cerrar", command=compile_window.destroy, 
+                    bg=self.colors["accent"], fg="white", relief=tk.FLAT, padx=15, pady=5,
+                    font=("Arial", 10))
+            btn_close.pack(pady=(10, 0))
+            
+            self.error_tabs.select(3)  # Mostrar tab de resultados
+            self.status_label.config(text="Compilación completada")
+            
+        except Exception as e:
+            progress.stop()
+            status_label.config(text="Error en compilación")
+            actualizar_estado("Compilación", False)
+            text_result.insert(tk.END, f"\n\n❌ Error crítico: {str(e)}\n", "error")
+            text_result.tag_configure("error", foreground="#e74c3c", font=("Consolas", 10, "bold"))
+            
+            btn_close = tk.Button(frame, text="Cerrar", command=compile_window.destroy, 
+                    bg="#e74c3c", fg="white", relief=tk.FLAT, padx=15, pady=5)
+            btn_close.pack(pady=(10, 0))
 
     def update_line_col(self, event=None):
         cursor_index = self.text_area.index(tk.INSERT)
