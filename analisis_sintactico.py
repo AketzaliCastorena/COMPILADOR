@@ -143,8 +143,11 @@ class AnalizadorSintactico:
                 siguiente = self.tokens[self.index + 1] if self.index + 1 < len(self.tokens) else None
                 if siguiente and siguiente.tipo == "OPERADOR_ARIT" and siguiente.lexema in ["++", "--"]:
                     return self.parse_sentencia_unaria()
-                else:
+                elif siguiente and (siguiente.tipo == "ASIGNACION" or siguiente.lexema == "="):
                     return self.parse_asignacion()
+                else:
+                    # Es una expresión suelta (ej: y + 2;)
+                    return self.parse_expresion_sentencia()
             elif actual.lexema == "cout":
                 return self.parse_sent_out()
             elif actual.lexema == "cin":
@@ -171,6 +174,15 @@ class AnalizadorSintactico:
         valor_unario = +1 if op_token.lexema == "++" else -1
         nodo.agregar_hijo(ASTNode("id", id_token.lexema, id_token.linea, id_token.columna))
         nodo.agregar_hijo(ASTNode("op", valor_unario, op_token.linea, op_token.columna))
+        self.coincidir_opcional("SIMBOLO", ";")
+        return nodo
+    
+    def parse_expresion_sentencia(self):
+        """Parsea una expresión suelta como sentencia (ej: y + 2;)"""
+        nodo = ASTNode("expresion_sentencia")
+        expr = self.parse_expresion()
+        if expr:
+            nodo.agregar_hijo(expr)
         self.coincidir_opcional("SIMBOLO", ";")
         return nodo
 

@@ -55,11 +55,11 @@ class TablaSimbolos:
         return None
     
     def marcar_usado(self, nombre, linea=None):
-        """Marca una variable como usada y registra la línea"""
+        """Marca una variable como usada y registra la línea (permite duplicados)"""
         simbolo = self.buscar(nombre)
         if simbolo:
             simbolo.usado = True
-            if linea is not None and linea not in simbolo.lineas_uso:
+            if linea is not None:
                 simbolo.lineas_uso.append(linea)
     
     def marcar_inicializado(self, nombre, valor=None):
@@ -81,8 +81,9 @@ class TablaSimbolos:
         for i, bucket in enumerate(self.tabla):
             if bucket:
                 for simbolo in bucket:
-                    # Recolectar líneas donde se usa
-                    lineas_uso = ",".join(map(str, simbolo.lineas_uso)) if simbolo.lineas_uso else str(simbolo.linea)
+                    # Recolectar líneas donde se usa y ordenarlas
+                    lineas_ordenadas = sorted(simbolo.lineas_uso) if simbolo.lineas_uso else [simbolo.linea]
+                    lineas_uso = ",".join(map(str, lineas_ordenadas))
                     resultado.append({
                         'identificador': simbolo.nombre,
                         'registro': contador,
@@ -228,7 +229,7 @@ class AnalizadorSemantico:
                         else:
                             # Agregar línea de declaración
                             simbolo = self.tabla_simbolos.buscar(id_nodo.valor)
-                            if simbolo and id_nodo.linea not in simbolo.lineas_uso:
+                            if simbolo:
                                 simbolo.lineas_uso.append(id_nodo.linea)
                             # Generar código intermedio para declaración
                             self.generador.agregar(f"DECLARE {id_nodo.valor} {self.tipo_actual}")
@@ -294,7 +295,7 @@ class AnalizadorSemantico:
             return "float", nodo.valor
         elif nodo.tipo == "bool":
             return "bool", nodo.valor
-        elif nodo.tipo == "id":
+        elif nodo.tipo == "id" or nodo.tipo == "IDENTIFICADOR":
             # Verificar que la variable exista
             simbolo = self.tabla_simbolos.buscar(nodo.valor)
             if simbolo is None:
@@ -367,6 +368,16 @@ class AnalizadorSemantico:
         self.generador.agregar(f"{temp} = {temp_izq} {operador} {temp_der}")
         
         return tipo_resultado, temp
+    
+    def visitar_unario(self, nodo):
+        """Visita sentencia unaria como y++ o y-- (cuando aparece como sentencia completa)"""
+        return self.visitar_operacion_unaria(nodo)
+    
+    def visitar_expresion_sentencia(self, nodo):
+        """Visita una expresión suelta como sentencia (ej: y + 2;)"""
+        if nodo.hijos:
+            self.visitar_expresion(nodo.hijos[0])
+        return None
     
     def visitar_operacion_unaria(self, nodo):
         """Visita operación unaria (++, --)"""
