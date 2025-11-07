@@ -163,11 +163,29 @@ class AnalizadorSemantico:
         # Determinar tipo semántico y valor
         tipo_sem = getattr(nodo, 'tipo_semantico', None)
         valor = getattr(nodo, 'valor_semantico', None)
+        
         # Si no existen, intentar deducir
         if tipo_sem is None and hasattr(nodo, 'tipo'):
             tipo_sem = nodo.tipo
         if valor is None and hasattr(nodo, 'valor'):
             valor = nodo.valor
+        
+        # Si el nodo tiene un valor calculado de una operación, mostrarlo
+        if hasattr(nodo, 'valor_calculado'):
+            valor_calc = nodo.valor_calculado
+            # Formatear el valor calculado
+            if isinstance(valor_calc, bool):
+                valor_calc_str = str(valor_calc).lower()
+            elif isinstance(valor_calc, float):
+                # Mostrar sin decimales si es un número entero
+                if valor_calc == int(valor_calc):
+                    valor_calc_str = str(int(valor_calc))
+                else:
+                    valor_calc_str = str(valor_calc)
+            else:
+                valor_calc_str = str(valor_calc)
+            valor = f"{valor} ({valor_calc_str})"
+        
         resultado.append({
             'nodo': nodo.tipo,
             'valor': valor,
@@ -273,8 +291,14 @@ class AnalizadorSemantico:
                 f"Incompatibilidad de tipos: no se puede asignar '{tipo_expr}' a '{simbolo.tipo}'"
             )
         
-        # Intentar evaluar el valor si es una constante simple
-        valor_asignado = self.evaluar_valor_simple(expr_nodo)
+        # Si temp_expr es un valor numérico calculado, usarlo como valor
+        valor_asignado = None
+        if isinstance(temp_expr, (int, float)):
+            valor_asignado = temp_expr
+        else:
+            # Intentar evaluar el valor si es una constante simple
+            valor_asignado = self.evaluar_valor_simple(expr_nodo)
+        
         self.tabla_simbolos.marcar_inicializado(nombre_var, valor_asignado)
         
         # Generar código intermedio
@@ -290,9 +314,15 @@ class AnalizadorSemantico:
         
         # Casos base: literales
         if nodo.tipo == "NUMERO_ENTERO":
-            return "int", nodo.valor
+            try:
+                return "int", int(nodo.valor)
+            except:
+                return "int", nodo.valor
         elif nodo.tipo == "NUMERO_REAL":
-            return "float", nodo.valor
+            try:
+                return "float", float(nodo.valor)
+            except:
+                return "float", nodo.valor
         elif nodo.tipo == "bool":
             return "bool", nodo.valor
         elif nodo.tipo == "id" or nodo.tipo == "IDENTIFICADOR":
@@ -313,6 +343,11 @@ class AnalizadorSemantico:
                 )
             
             self.tabla_simbolos.marcar_usado(nodo.valor, nodo.linea)
+            
+            # Si la variable tiene un valor conocido, retornarlo para cálculos
+            if simbolo.valor is not None and isinstance(simbolo.valor, (int, float)):
+                return simbolo.tipo, simbolo.valor
+            
             return simbolo.tipo, nodo.valor
         
         # Operadores binarios
@@ -337,7 +372,7 @@ class AnalizadorSemantico:
         return None, None
     
     def visitar_operacion_binaria(self, nodo):
-        """Visita operación binaria"""
+        """Visita operación binaria y calcula el valor si es posible"""
         if len(nodo.hijos) < 2:
             return None, None
         
@@ -348,6 +383,40 @@ class AnalizadorSemantico:
             return None, None
         
         operador = nodo.valor
+        
+        # Intentar evaluar el valor si ambos operandos son literales
+        valor_calculado = None
+        try:
+            if isinstance(temp_izq, (int, float)) and isinstance(temp_der, (int, float)):
+                if operador == '+':
+                    valor_calculado = temp_izq + temp_der
+                elif operador == '-':
+                    valor_calculado = temp_izq - temp_der
+                elif operador == '*':
+                    valor_calculado = temp_izq * temp_der
+                elif operador == '/':
+                    valor_calculado = temp_izq / temp_der if temp_der != 0 else None
+                elif operador == '<':
+                    valor_calculado = temp_izq < temp_der
+                elif operador == '>':
+                    valor_calculado = temp_izq > temp_der
+                elif operador == '<=':
+                    valor_calculado = temp_izq <= temp_der
+                elif operador == '>=':
+                    valor_calculado = temp_izq >= temp_der
+                elif operador == '==':
+                    valor_calculado = temp_izq == temp_der
+                elif operador == '!=':
+                    valor_calculado = temp_izq != temp_der
+                
+                # Almacenar el valor calculado en el nodo para visualización
+                if valor_calculado is not None:
+                    nodo.valor_calculado = valor_calculado
+                    # Debug: imprimir el cálculo
+                    print(f"DEBUG: {temp_izq} {operador} {temp_der} = {valor_calculado}")
+        except Exception as e:
+            print(f"ERROR en cálculo: {e}")
+            pass
         
         # Determinar tipo resultante
         if nodo.tipo == "op" and operador in ["<", ">", "<=", ">=", "==", "!=", "&&", "||"]:
@@ -366,6 +435,10 @@ class AnalizadorSemantico:
         # Generar código intermedio
         temp = self.generador.nuevo_temporal()
         self.generador.agregar(f"{temp} = {temp_izq} {operador} {temp_der}")
+        
+        # Si calculamos un valor, usarlo en lugar del temporal
+        if valor_calculado is not None:
+            return tipo_resultado, valor_calculado
         
         return tipo_resultado, temp
     

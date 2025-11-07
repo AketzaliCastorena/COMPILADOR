@@ -675,47 +675,155 @@ class CompilerIDE:
             analizador = AnalizadorSemantico(ast)
             tabla_simbolos, errores, advertencias, codigo_intermedio, semantico_detalle = analizador.analizar()
             
-            # Mostrar tabla semántica detallada con mejor formato
-            text_sem = self.semantic_tab.winfo_children()[0]
-            header = f"{'NODO':<22}{'TIPO SEMÁNTICO':<18}{'VALOR':<18}{'LÍNEA':<8}{'COL':<6}\n"
-            text_sem.insert(tk.END, header, "table_header")
-            text_sem.insert(tk.END, "-"*72 + "\n", "separator")
-            for info in semantico_detalle:
-                nodo = str(info['nodo']) if info['nodo'] is not None else ''
-                tipo_sem = str(info['tipo_semantico']) if info['tipo_semantico'] is not None else ''
-                valor = str(info['valor']) if info['valor'] is not None else ''
-                linea = str(info['linea']) if info['linea'] is not None else ''
-                columna = str(info['columna']) if info['columna'] is not None else ''
-                fila = f"{nodo:<22}{tipo_sem:<18}{valor:<18}{linea:<8}{columna:<6}\n"
-                text_sem.insert(tk.END, fila)
-            text_sem.insert(tk.END, "\n" + "="*72 + "\n", "separator")
+            # Eliminar el widget anterior en la pestaña semántica
+            for widget in self.semantic_tab.winfo_children():
+                widget.destroy()
             
-            # Mostrar análisis semántico resumido
-            text_sem.insert(tk.END, "✓ ANÁLISIS SEMÁNTICO COMPLETADO\n\n", "title")
-            text_sem.insert(tk.END, f"📊 Símbolos encontrados: {len(tabla_simbolos.obtener_simbolos())}\n", "info")
-            text_sem.insert(tk.END, f"❌ Errores semánticos: {len(errores)}\n", "error" if errores else "success")
-            text_sem.insert(tk.END, f"⚠️  Advertencias: {len(advertencias)}\n", "warning" if advertencias else "success")
-            text_sem.insert(tk.END, f"📝 Instrucciones generadas: {len(codigo_intermedio)}\n\n", "info")
+            # Crear frame principal para el árbol semántico
+            main_frame = tk.Frame(self.semantic_tab)
+            main_frame.pack(expand=True, fill=tk.BOTH, padx=5, pady=5)
             
-            if errores or advertencias:
-                text_sem.insert(tk.END, "Detalles:\n", "subtitle")
-                text_sem.insert(tk.END, "-" * 80 + "\n\n", "separator")
+            # Frame superior para información resumida
+            info_frame = tk.Frame(main_frame, bg="#ecf0f1")
+            info_frame.pack(fill=tk.X, padx=5, pady=5)
             
-            # Configurar estilos
-            text_sem.tag_configure("table_header", foreground="#3498db", font=("Consolas", 10, "bold"))
-            text_sem.tag_configure("separator", foreground="#95a5a6")
-            text_sem.tag_configure("title", foreground="#27ae60", font=("Consolas", 12, "bold"))
-            text_sem.tag_configure("subtitle", foreground="#2c3e50", font=("Consolas", 11, "bold"))
-            text_sem.tag_configure("info", foreground="#3498db")
-            text_sem.tag_configure("success", foreground="#27ae60")
-            text_sem.tag_configure("error", foreground="#e74c3c")
-            text_sem.tag_configure("warning", foreground="#f39c12")
+            info_text = tk.Text(info_frame, height=4, wrap=tk.WORD, bg="#ecf0f1", 
+                              fg="#2c3e50", font=("Consolas", 9), relief=tk.FLAT)
+            info_text.pack(fill=tk.X, padx=5, pady=5)
+            
+            info_text.insert(tk.END, "✓ ANÁLISIS SEMÁNTICO COMPLETADO\n", "title")
+            info_text.insert(tk.END, f"📊 Símbolos: {len(tabla_simbolos.obtener_simbolos())} | ", "info")
+            info_text.insert(tk.END, f"❌ Errores: {len(errores)} | ", "error" if errores else "success")
+            info_text.insert(tk.END, f"⚠️ Advertencias: {len(advertencias)} | ", "warning" if advertencias else "success")
+            info_text.insert(tk.END, f"📝 Instrucciones: {len(codigo_intermedio)}\n", "info")
+            
+            info_text.tag_configure("title", foreground="#27ae60", font=("Consolas", 10, "bold"))
+            info_text.tag_configure("info", foreground="#3498db")
+            info_text.tag_configure("success", foreground="#27ae60")
+            info_text.tag_configure("error", foreground="#e74c3c")
+            info_text.tag_configure("warning", foreground="#f39c12")
+            info_text.config(state=tk.DISABLED)
+            
+            # Crear frame para el árbol semántico
+            tree_frame = tk.Frame(main_frame)
+            tree_frame.pack(expand=True, fill=tk.BOTH, padx=5, pady=5)
+            
+            # Scrollbar vertical
+            vsb = ttk.Scrollbar(tree_frame, orient="vertical")
+            vsb.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            # Treeview con scrollbar
+            tree = ttk.Treeview(
+                tree_frame,
+                yscrollcommand=vsb.set,
+                selectmode="browse"
+            )
+            tree.pack(expand=True, fill=tk.BOTH)
+            
+            # Configurar scrollbar
+            vsb.config(command=tree.yview)
+            
+            # Configurar estilo para el árbol
+            style = ttk.Style()
+            style.configure("Treeview", 
+                           font=('Consolas', 10),
+                           rowheight=25,
+                           background="#ffffff",
+                           fieldbackground="#ffffff")
+            
+            # Configurar columnas
+            tree["columns"] = ("tipo_semantico", "valor", "linea", "columna")
+            tree.column("#0", width=250, minwidth=150, stretch=tk.YES)
+            tree.column("tipo_semantico", width=150, anchor=tk.W)
+            tree.column("valor", width=150, anchor=tk.W)
+            tree.column("linea", width=80, anchor=tk.CENTER)
+            tree.column("columna", width=80, anchor=tk.CENTER)
+            
+            # Configurar encabezados
+            tree.heading("#0", text="Nodo", anchor=tk.W)
+            tree.heading("tipo_semantico", text="Tipo Semántico", anchor=tk.W)
+            tree.heading("valor", text="Valor", anchor=tk.W)
+            tree.heading("linea", text="Línea", anchor=tk.CENTER)
+            tree.heading("columna", text="Columna", anchor=tk.CENTER)
+            
+            # Función recursiva para insertar nodos del AST con información semántica
+            def insertar_nodo_semantico(parent, nodo, nivel=0):
+                # Construir texto del nodo
+                texto = nodo.tipo
+                
+                # Obtener tipo semántico si existe
+                tipo_sem = getattr(nodo, 'tipo_semantico', None)
+                if tipo_sem is None and hasattr(nodo, 'tipo'):
+                    tipo_sem = nodo.tipo
+                
+                # Obtener valor - priorizar valor_calculado si existe
+                valor_mostrar = ""
+                if hasattr(nodo, 'valor_calculado'):
+                    valor_calc = nodo.valor_calculado
+                    if isinstance(valor_calc, bool):
+                        valor_calc_str = str(valor_calc).lower()
+                    elif isinstance(valor_calc, float):
+                        if valor_calc == int(valor_calc):
+                            valor_calc_str = str(int(valor_calc))
+                        else:
+                            valor_calc_str = str(valor_calc)
+                    else:
+                        valor_calc_str = str(valor_calc)
+                    valor_mostrar = f"{nodo.valor} ({valor_calc_str})" if nodo.valor else valor_calc_str
+                elif hasattr(nodo, 'valor_semantico') and nodo.valor_semantico is not None:
+                    valor_mostrar = str(nodo.valor_semantico)
+                elif hasattr(nodo, 'valor') and nodo.valor is not None:
+                    valor_mostrar = str(nodo.valor)
+                
+                # Agregar valor al texto del nodo si existe
+                if valor_mostrar:
+                    texto += f": {valor_mostrar}"
+                
+                # Insertar el nodo en el árbol
+                item_id = tree.insert(
+                    parent,
+                    "end",
+                    text=texto,
+                    values=(
+                        str(tipo_sem) if tipo_sem else "",
+                        valor_mostrar,
+                        nodo.linea if nodo.linea is not None else "",
+                        nodo.columna if nodo.columna is not None else ""
+                    ),
+                    open=nivel < 2  # Expandir los primeros 2 niveles
+                )
+                
+                # Recursión para hijos
+                for hijo in nodo.hijos:
+                    insertar_nodo_semantico(item_id, hijo, nivel + 1)
+            
+            # Insertar árbol completo desde la raíz
+            insertar_nodo_semantico("", ast)
+            
+            # Botones para expandir/contraer
+            btn_frame = tk.Frame(main_frame)
+            btn_frame.pack(fill=tk.X, padx=5, pady=5)
+            
+            def expandir_todo():
+                for item in tree.get_children():
+                    tree.item(item, open=True)
+                    expandir_hijos(item)
+            
+            def expandir_hijos(item):
+                for child in tree.get_children(item):
+                    tree.item(child, open=True)
+                    expandir_hijos(child)
+            
+            def contraer_todo():
+                for item in tree.get_children():
+                    tree.item(item, open=False)
+            
+            ttk.Button(btn_frame, text="Expandir Todo", command=expandir_todo).pack(side=tk.LEFT, padx=5)
+            ttk.Button(btn_frame, text="Contraer Todo", command=contraer_todo).pack(side=tk.LEFT, padx=5)
             
             # Mostrar tabla de símbolos
             text_tabla = self.hash_table_tab.winfo_children()[0]
-            text_tabla.insert(tk.END, "=" * 130 + "\n", "header")
             text_tabla.insert(tk.END, "TABLA DE SÍMBOLOS (Hash Table)\n", "header")
-            text_tabla.insert(tk.END, "=" * 130 + "\n\n", "header")
             
             simbolos_visuales = tabla_simbolos.obtener_tabla_visual()
             
@@ -723,7 +831,6 @@ class CompilerIDE:
                 # Encabezados
                 header = f"{'Identificador':<20} {'Registro':<12} {'Valor':<20} {'Tipo de dato':<15} {'Ámbito':<12} {'Núm. de Línea':<60}\n"
                 text_tabla.insert(tk.END, header, "table_header")
-                text_tabla.insert(tk.END, "-" * 130 + "\n", "separator")
                 
                 # Datos
                 for simbolo in simbolos_visuales:
@@ -743,9 +850,6 @@ class CompilerIDE:
                         f"{lineas:<60}\n"
                     )
                     text_tabla.insert(tk.END, fila)
-                
-                text_tabla.insert(tk.END, "\n" + "=" * 130 + "\n", "separator")
-                text_tabla.insert(tk.END, f"Total de símbolos: {len(simbolos_visuales)}\n", "info")
             else:
                 text_tabla.insert(tk.END, "No se encontraron símbolos en el programa.\n", "info")
             
