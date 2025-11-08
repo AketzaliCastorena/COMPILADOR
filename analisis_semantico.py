@@ -97,8 +97,7 @@ class TablaSimbolos:
                     })
                     contador += 1
         return resultado
-
-
+    
 class GeneradorCodigoIntermedio:
     """Genera código de tres direcciones"""
     def __init__(self):
@@ -121,6 +120,12 @@ class GeneradorCodigoIntermedio:
     def agregar(self, instruccion):
         """Agrega una instrucción al código intermedio"""
         self.codigo.append(instruccion)
+        
+    def redondear(self, valor, decimales=2):
+        """Redondea los números flotantes a un número fijo de decimales"""
+        if isinstance(valor, float):
+            return round(valor, decimales)
+        return valor
     
     def obtener_codigo(self):
         """Retorna el código generado"""
@@ -396,21 +401,22 @@ class AnalizadorSemantico:
                     valor_calculado = temp_izq * temp_der
                 elif operador == '/':
                     valor_calculado = temp_izq / temp_der if temp_der != 0 else None
-                elif operador == '<':
+                valor_calculado = self.generador.redondear(valor_calculado)
+            elif operador == '<':
                     valor_calculado = temp_izq < temp_der
-                elif operador == '>':
+            elif operador == '>':
                     valor_calculado = temp_izq > temp_der
-                elif operador == '<=':
+            elif operador == '<=':
                     valor_calculado = temp_izq <= temp_der
-                elif operador == '>=':
+            elif operador == '>=':
                     valor_calculado = temp_izq >= temp_der
-                elif operador == '==':
+            elif operador == '==':
                     valor_calculado = temp_izq == temp_der
-                elif operador == '!=':
+            elif operador == '!=':
                     valor_calculado = temp_izq != temp_der
                 
                 # Almacenar el valor calculado en el nodo para visualización
-                if valor_calculado is not None:
+            if valor_calculado is not None:
                     nodo.valor_calculado = valor_calculado
                     # Debug: imprimir el cálculo
                     print(f"DEBUG: {temp_izq} {operador} {temp_der} = {valor_calculado}")
