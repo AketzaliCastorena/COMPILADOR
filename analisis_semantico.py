@@ -402,29 +402,25 @@ class AnalizadorSemantico:
                 elif operador == '/':
                     valor_calculado = temp_izq / temp_der if temp_der != 0 else None
                 valor_calculado = self.generador.redondear(valor_calculado)
-            elif operador == '<':
+            else:
+                if operador == '<':
                     valor_calculado = temp_izq < temp_der
-            elif operador == '>':
+                elif operador == '>':
                     valor_calculado = temp_izq > temp_der
-            elif operador == '<=':
+                elif operador == '<=':
                     valor_calculado = temp_izq <= temp_der
-            elif operador == '>=':
+                elif operador == '>=':
                     valor_calculado = temp_izq >= temp_der
-            elif operador == '==':
+                elif operador == '==':
                     valor_calculado = temp_izq == temp_der
-            elif operador == '!=':
+                elif operador == '!=':
                     valor_calculado = temp_izq != temp_der
-                
-                # Almacenar el valor calculado en el nodo para visualización
+
+            # Almacenar el valor calculado en el nodo para visualización
             if valor_calculado is not None:
-                    nodo.valor_calculado = valor_calculado
-                    # Debug: imprimir el cálculo
-                    print(f"DEBUG: {temp_izq} {operador} {temp_der} = {valor_calculado}")
+                nodo.valor_calculado = valor_calculado
         except Exception as e:
-            print(f"ERROR en cálculo: {e}")
-            pass
-        
-        # Determinar tipo resultante
+            pass  # Determinar tipo resultante
         if nodo.tipo == "op" and operador in ["<", ">", "<=", ">=", "==", "!=", "&&", "||"]:
             # Operadores relacionales y lógicos retornan bool
             tipo_resultado = "bool"
@@ -483,7 +479,10 @@ class AnalizadorSemantico:
             )
             return None, None
         
-        self.tabla_simbolos.marcar_usado(id_nodo.valor, id_nodo.linea)
+        # Marcar como usada DOS VECES: una para leer el valor y otra para escribir
+        # Esto simula x = x + 1 o x = x - 1
+        self.tabla_simbolos.marcar_usado(id_nodo.valor, id_nodo.linea)  # Primera vez: lectura
+        self.tabla_simbolos.marcar_usado(id_nodo.valor, id_nodo.linea)  # Segunda vez: escritura
         
         # Generar código intermedio
         operador = "++" if nodo.valor == 1 or len(nodo.hijos) > 1 and nodo.hijos[1].valor == 1 else "--"

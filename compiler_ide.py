@@ -641,10 +641,26 @@ class CompilerIDE:
         insertar_nodo(tree, "", nodo_raiz)
 
     def semantic_analysis(self):
-        self.semantic_tab.winfo_children()[0].delete("1.0", tk.END)
-        self.semantic_errors.winfo_children()[0].delete("1.0", tk.END)
-        self.hash_table_tab.winfo_children()[0].delete("1.0", tk.END)
-        self.intermediate_code_tab.winfo_children()[0].delete("1.0", tk.END)
+        # Limpiar todas las pestañas antes de comenzar
+        try:
+            self.hash_table_tab.winfo_children()[0].delete("1.0", tk.END)
+        except:
+            pass
+        
+        try:
+            self.intermediate_code_tab.winfo_children()[0].delete("1.0", tk.END)
+        except:
+            pass
+        
+        # Limpiar la pestaña de errores semánticos completamente
+        try:
+            text_errores = self.semantic_errors.winfo_children()[0]
+            text_errores.delete("1.0", tk.END)
+            # Eliminar todas las tags anteriores
+            for tag in text_errores.tag_names():
+                text_errores.tag_delete(tag)
+        except:
+            pass
         
         self.status_label.config(text="Ejecutando análisis semántico...")
         self.root.update()
@@ -880,11 +896,25 @@ class CompilerIDE:
             
             # Mostrar errores semánticos
             text_errores = self.semantic_errors.winfo_children()[0]
+            
+            # Limpiar cualquier contenido previo y tags
+            text_errores.delete("1.0", tk.END)
+            for tag in text_errores.tag_names():
+                text_errores.tag_delete(tag)
+            
+            # Configurar estilos primero
+            text_errores.tag_configure("header", foreground="#2c3e50", font=("Consolas", 11, "bold"))
+            text_errores.tag_configure("error", foreground="#e74c3c", font=("Consolas", 10))
+            text_errores.tag_configure("warning", foreground="#f39c12", font=("Consolas", 10))
+            text_errores.tag_configure("success", foreground="#27ae60", font=("Consolas", 11, "bold"))
+            text_errores.tag_configure("separator", foreground="#95a5a6")
+            
+            # Mostrar errores
             if errores:
                 text_errores.insert(tk.END, "ERRORES SEMÁNTICOS:\n", "header")
                 text_errores.insert(tk.END, "=" * 80 + "\n\n", "separator")
-                for error in errores:
-                    text_errores.insert(tk.END, f"❌ {error}\n\n", "error")
+                for i, error in enumerate(errores, 1):
+                    text_errores.insert(tk.END, f"❌ {i}. {error}\n\n", "error")
             else:
                 text_errores.insert(tk.END, "✓ No se encontraron errores semánticos.\n", "success")
             
@@ -893,15 +923,8 @@ class CompilerIDE:
                 text_errores.insert(tk.END, "\n" + "=" * 80 + "\n", "separator")
                 text_errores.insert(tk.END, "ADVERTENCIAS:\n", "header")
                 text_errores.insert(tk.END, "=" * 80 + "\n\n", "separator")
-                for advertencia in advertencias:
-                    text_errores.insert(tk.END, f"⚠️  {advertencia}\n\n", "warning")
-            
-            # Configurar estilos
-            text_errores.tag_configure("header", foreground="#2c3e50", font=("Consolas", 11, "bold"))
-            text_errores.tag_configure("error", foreground="#e74c3c")
-            text_errores.tag_configure("warning", foreground="#f39c12")
-            text_errores.tag_configure("success", foreground="#27ae60", font=("Consolas", 11, "bold"))
-            text_errores.tag_configure("separator", foreground="#95a5a6")
+                for i, advertencia in enumerate(advertencias, 1):
+                    text_errores.insert(tk.END, f"⚠️  {i}. {advertencia}\n\n", "warning")
             
             self.tabs.select(2)  # Mostrar tab semántico
             self.status_label.config(text="Análisis semántico completado")
