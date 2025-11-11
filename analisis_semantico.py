@@ -307,12 +307,13 @@ class AnalizadorSemantico:
         self.tabla_simbolos.marcar_inicializado(nombre_var, valor_asignado)
         
         # Almacenar información semántica en el nodo de asignación
-        nodo.tipo_semantico = "asignacion"
+        nodo.tipo_semantico = simbolo.tipo  # Usar el tipo del símbolo
+        # Siempre almacenar el valor calculado para que se muestre en el árbol
         if valor_asignado is not None:
             nodo.valor_calculado = valor_asignado
         
         # Generar código intermedio
-        if temp_expr:
+        if temp_expr is not None:
             self.generador.agregar(f"{nombre_var} = {temp_expr}")
         
         return simbolo.tipo
@@ -437,6 +438,34 @@ class AnalizadorSemantico:
                 # Almacenar el valor calculado en el nodo para visualización
                 if valor_calculado is not None:
                     nodo.valor_calculado = valor_calculado
+            
+            # Evaluar operadores lógicos && y || cuando ambos operandos son booleanos
+            elif operador in ['&&', '||']:
+                # Intentar evaluar si ambos operandos son valores booleanos o pueden convertirse
+                izq_bool = None
+                der_bool = None
+                
+                # Convertir operandos a booleano si es posible
+                if isinstance(temp_izq, bool):
+                    izq_bool = temp_izq
+                elif isinstance(temp_izq, (int, float)):
+                    izq_bool = bool(temp_izq)
+                
+                if isinstance(temp_der, bool):
+                    der_bool = temp_der
+                elif isinstance(temp_der, (int, float)):
+                    der_bool = bool(temp_der)
+                
+                # Si pudimos obtener ambos valores booleanos, calcular el resultado
+                if izq_bool is not None and der_bool is not None:
+                    if operador == '&&':
+                        valor_calculado = izq_bool and der_bool
+                    elif operador == '||':
+                        valor_calculado = izq_bool or der_bool
+                    
+                    # Almacenar el valor calculado en el nodo
+                    if valor_calculado is not None:
+                        nodo.valor_calculado = valor_calculado
         except Exception as e:
             pass
         
@@ -531,8 +560,22 @@ class AnalizadorSemantico:
                 )
                 return None, None
             
+            # Intentar calcular el valor si es posible
+            valor_calculado = None
+            if isinstance(temp, bool):
+                valor_calculado = not temp
+                nodo.valor_calculado = valor_calculado
+            
+            # Almacenar tipo semántico
+            nodo.tipo_semantico = "bool"
+            
             temp_resultado = self.generador.nuevo_temporal()
             self.generador.agregar(f"{temp_resultado} = !{temp}")
+            
+            # Si calculamos un valor, retornarlo
+            if valor_calculado is not None:
+                return "bool", valor_calculado
+            
             return "bool", temp_resultado
         
         return None, None

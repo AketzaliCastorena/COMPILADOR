@@ -778,18 +778,45 @@ class CompilerIDE:
                     valor_calc = nodo.valor_calculado
                     if isinstance(valor_calc, bool):
                         valor_calc_str = str(valor_calc).lower()
-                    elif isinstance(valor_calc, float):
-                        if valor_calc == int(valor_calc):
-                            valor_calc_str = str(int(valor_calc))
+                    elif isinstance(valor_calc, (int, float)):
+                        # Si el tipo semántico es float, mostrar siempre con decimales
+                        if tipo_sem == "float":
+                            # Asegurar que se muestre como float (con .0 si es entero)
+                            if isinstance(valor_calc, int) or valor_calc == int(valor_calc):
+                                valor_calc_str = f"{float(valor_calc):.1f}"
+                            else:
+                                valor_calc_str = str(float(valor_calc))
                         else:
-                            valor_calc_str = str(valor_calc)
+                            # Para int, mostrar sin decimales
+                            if isinstance(valor_calc, float) and valor_calc == int(valor_calc):
+                                valor_calc_str = str(int(valor_calc))
+                            else:
+                                valor_calc_str = str(valor_calc)
                     else:
                         valor_calc_str = str(valor_calc)
-                    valor_mostrar = f"{nodo.valor} ({valor_calc_str})" if nodo.valor else valor_calc_str
+                    
+                    # Para asignaciones y operaciones, mostrar el valor calculado con formato
+                    if hasattr(nodo, 'valor') and nodo.valor is not None:
+                        # Si el nodo tiene un valor (operadores), mostrar operador (valor)
+                        valor_mostrar = f"{nodo.valor} ({valor_calc_str})"
+                    else:
+                        # Si no tiene valor (asignaciones directas), solo mostrar el número
+                        valor_mostrar = valor_calc_str
                 elif hasattr(nodo, 'valor_semantico') and nodo.valor_semantico is not None:
                     valor_mostrar = str(nodo.valor_semantico)
                 elif hasattr(nodo, 'valor') and nodo.valor is not None:
-                    valor_mostrar = str(nodo.valor)
+                    # Si es un valor directo y el tipo es float, asegurar formato float
+                    if tipo_sem == "float" and isinstance(nodo.valor, (int, float, str)):
+                        try:
+                            val_num = float(nodo.valor)
+                            if val_num == int(val_num):
+                                valor_mostrar = f"{val_num:.1f}"
+                            else:
+                                valor_mostrar = str(val_num)
+                        except:
+                            valor_mostrar = str(nodo.valor)
+                    else:
+                        valor_mostrar = str(nodo.valor)
                 
                 # Agregar valor al texto del nodo si existe
                 if valor_mostrar:
