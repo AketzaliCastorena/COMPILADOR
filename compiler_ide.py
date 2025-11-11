@@ -747,18 +747,18 @@ class CompilerIDE:
                            background="#ffffff",
                            fieldbackground="#ffffff")
             
-            # Configurar columnas
-            tree["columns"] = ("tipo_semantico", "valor", "linea", "columna")
+            # Configurar columnas - VALOR primero, después TIPO SEMÁNTICO
+            tree["columns"] = ("valor", "tipo_semantico", "linea", "columna")
             tree.column("#0", width=250, minwidth=150, stretch=tk.YES)
-            tree.column("tipo_semantico", width=150, anchor=tk.W)
             tree.column("valor", width=150, anchor=tk.W)
+            tree.column("tipo_semantico", width=150, anchor=tk.W)
             tree.column("linea", width=80, anchor=tk.CENTER)
             tree.column("columna", width=80, anchor=tk.CENTER)
             
-            # Configurar encabezados
+            # Configurar encabezados - VALOR primero, después TIPO SEMÁNTICO
             tree.heading("#0", text="Nodo", anchor=tk.W)
-            tree.heading("tipo_semantico", text="Tipo Semántico", anchor=tk.W)
             tree.heading("valor", text="Valor", anchor=tk.W)
+            tree.heading("tipo_semantico", text="Tipo Semántico", anchor=tk.W)
             tree.heading("linea", text="Línea", anchor=tk.CENTER)
             tree.heading("columna", text="Columna", anchor=tk.CENTER)
             
@@ -795,14 +795,14 @@ class CompilerIDE:
                 if valor_mostrar:
                     texto += f": {valor_mostrar}"
                 
-                # Insertar el nodo en el árbol
+                # Insertar el nodo en el árbol - VALOR primero, TIPO SEMÁNTICO después
                 item_id = tree.insert(
                     parent,
                     "end",
                     text=texto,
                     values=(
-                        str(tipo_sem) if tipo_sem else "",
                         valor_mostrar,
+                        str(tipo_sem) if tipo_sem else "",
                         nodo.linea if nodo.linea is not None else "",
                         nodo.columna if nodo.columna is not None else ""
                     ),

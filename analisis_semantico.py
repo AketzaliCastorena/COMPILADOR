@@ -306,6 +306,11 @@ class AnalizadorSemantico:
         
         self.tabla_simbolos.marcar_inicializado(nombre_var, valor_asignado)
         
+        # Almacenar información semántica en el nodo de asignación
+        nodo.tipo_semantico = "asignacion"
+        if valor_asignado is not None:
+            nodo.valor_calculado = valor_asignado
+        
         # Generar código intermedio
         if temp_expr:
             self.generador.agregar(f"{nombre_var} = {temp_expr}")
@@ -319,16 +324,19 @@ class AnalizadorSemantico:
         
         # Casos base: literales
         if nodo.tipo == "NUMERO_ENTERO":
+            nodo.tipo_semantico = "int"
             try:
                 return "int", int(nodo.valor)
             except:
                 return "int", nodo.valor
         elif nodo.tipo == "NUMERO_REAL":
+            nodo.tipo_semantico = "float"
             try:
                 return "float", float(nodo.valor)
             except:
                 return "float", nodo.valor
         elif nodo.tipo == "bool":
+            nodo.tipo_semantico = "bool"
             return "bool", nodo.valor
         elif nodo.tipo == "id" or nodo.tipo == "IDENTIFICADOR":
             # Verificar que la variable exista
@@ -348,6 +356,9 @@ class AnalizadorSemantico:
                 )
             
             self.tabla_simbolos.marcar_usado(nodo.valor, nodo.linea)
+            
+            # Almacenar el tipo semántico en el nodo
+            nodo.tipo_semantico = simbolo.tipo
             
             # Si la variable tiene un valor conocido, retornarlo para cálculos
             if simbolo.valor is not None and isinstance(simbolo.valor, (int, float)):
@@ -401,9 +412,7 @@ class AnalizadorSemantico:
                     valor_calculado = temp_izq * temp_der
                 elif operador == '/':
                     valor_calculado = temp_izq / temp_der if temp_der != 0 else None
-                valor_calculado = self.generador.redondear(valor_calculado)
-            else:
-                if operador == '<':
+                elif operador == '<':
                     valor_calculado = temp_izq < temp_der
                 elif operador == '>':
                     valor_calculado = temp_izq > temp_der
@@ -415,24 +424,42 @@ class AnalizadorSemantico:
                     valor_calculado = temp_izq == temp_der
                 elif operador == '!=':
                     valor_calculado = temp_izq != temp_der
-
-            # Almacenar el valor calculado en el nodo para visualización
-            if valor_calculado is not None:
-                nodo.valor_calculado = valor_calculado
+                
+                # Si ambos operandos son enteros, truncar decimales del resultado
+                if isinstance(valor_calculado, (int, float)) and not isinstance(valor_calculado, bool):
+                    if tipo_izq == "int" and tipo_der == "int":
+                        # Para operaciones entre enteros, tomar solo la parte entera (truncar)
+                        valor_calculado = int(valor_calculado)
+                    else:
+                        # Para operaciones con floats, aplicar redondeo decimal
+                        valor_calculado = self.generador.redondear(valor_calculado)
+                
+                # Almacenar el valor calculado en el nodo para visualización
+                if valor_calculado is not None:
+                    nodo.valor_calculado = valor_calculado
         except Exception as e:
-            pass  # Determinar tipo resultante
+            pass
+        
+        # Determinar tipo resultante
         if nodo.tipo == "op" and operador in ["<", ">", "<=", ">=", "==", "!=", "&&", "||"]:
             # Operadores relacionales y lógicos retornan bool
             tipo_resultado = "bool"
         elif tipo_izq == "float" or tipo_der == "float":
             tipo_resultado = "float"
         elif tipo_izq == "int" and tipo_der == "int":
-            tipo_resultado = "int"
+            # Si ambos son int pero el resultado calculado es decimal, el tipo es float
+            if valor_calculado is not None and isinstance(valor_calculado, float) and valor_calculado != int(valor_calculado):
+                tipo_resultado = "float"
+            else:
+                tipo_resultado = "int"
         else:
             self.errores.append(
                 f"Error semántico: Operación '{operador}' con tipos incompatibles '{tipo_izq}' y '{tipo_der}'"
             )
             return None, None
+        
+        # Almacenar el tipo en el nodo para visualización en el árbol
+        nodo.tipo_semantico = tipo_resultado
         
         # Generar código intermedio
         temp = self.generador.nuevo_temporal()
