@@ -272,19 +272,33 @@ class AnalizadorSemantico:
         nombre_var = id_nodo.valor
         simbolo = self.tabla_simbolos.buscar(nombre_var)
         
+        # Segundo hijo es la expresión (evaluar antes de verificar el símbolo)
+        expr_nodo = nodo.hijos[1]
+        tipo_expr, temp_expr = self.visitar_expresion(expr_nodo)
+        
+        # Si temp_expr es un valor numérico calculado, almacenarlo para visualización
+        valor_asignado = None
+        if isinstance(temp_expr, (int, float)):
+            valor_asignado = temp_expr
+        else:
+            # Intentar evaluar el valor si es una constante simple
+            valor_asignado = self.evaluar_valor_simple(expr_nodo)
+        
+        # Almacenar el valor calculado en el nodo para visualización (incluso si hay error)
+        if valor_asignado is not None:
+            nodo.valor_calculado = valor_asignado
+        
         if simbolo is None:
             self.errores.append(
                 f"Error semántico en L{id_nodo.linea} C{id_nodo.columna}: "
                 f"Variable '{nombre_var}' no declarada"
             )
+            # Establecer un tipo genérico para visualización
+            nodo.tipo_semantico = "int" if isinstance(valor_asignado, int) else "float" if isinstance(valor_asignado, float) else "unknown"
             return None
         
         # Marcar como usada e inicializada
         self.tabla_simbolos.marcar_usado(nombre_var, id_nodo.linea)
-        
-        # Segundo hijo es la expresión
-        expr_nodo = nodo.hijos[1]
-        tipo_expr, temp_expr = self.visitar_expresion(expr_nodo)
         
         if tipo_expr is None:
             return None
@@ -296,21 +310,10 @@ class AnalizadorSemantico:
                 f"Incompatibilidad de tipos: no se puede asignar '{tipo_expr}' a '{simbolo.tipo}'"
             )
         
-        # Si temp_expr es un valor numérico calculado, usarlo como valor
-        valor_asignado = None
-        if isinstance(temp_expr, (int, float)):
-            valor_asignado = temp_expr
-        else:
-            # Intentar evaluar el valor si es una constante simple
-            valor_asignado = self.evaluar_valor_simple(expr_nodo)
-        
         self.tabla_simbolos.marcar_inicializado(nombre_var, valor_asignado)
         
         # Almacenar información semántica en el nodo de asignación
         nodo.tipo_semantico = simbolo.tipo  # Usar el tipo del símbolo
-        # Siempre almacenar el valor calculado para que se muestre en el árbol
-        if valor_asignado is not None:
-            nodo.valor_calculado = valor_asignado
         
         # Generar código intermedio
         if temp_expr is not None:
