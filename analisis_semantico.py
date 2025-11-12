@@ -341,7 +341,9 @@ class AnalizadorSemantico:
                 return "float", nodo.valor
         elif nodo.tipo == "bool":
             nodo.tipo_semantico = "bool"
-            return "bool", nodo.valor
+            # Convertir el string "true"/"false" a booleano de Python
+            valor_bool = nodo.valor.lower() == "true" if isinstance(nodo.valor, str) else bool(nodo.valor)
+            return "bool", valor_bool
         elif nodo.tipo == "id" or nodo.tipo == "IDENTIFICADOR":
             # Verificar que la variable exista
             simbolo = self.tabla_simbolos.buscar(nodo.valor)
@@ -442,8 +444,8 @@ class AnalizadorSemantico:
                 if valor_calculado is not None:
                     nodo.valor_calculado = valor_calculado
             
-            # Evaluar operadores lógicos && y || cuando ambos operandos son booleanos
-            elif operador in ['&&', '||']:
+            # Evaluar operadores lógicos && y || - Bloque independiente para operadores lógicos
+            if operador in ['&&', '||']:
                 # Intentar evaluar si ambos operandos son valores booleanos o pueden convertirse
                 izq_bool = None
                 der_bool = None

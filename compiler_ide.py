@@ -774,6 +774,7 @@ class CompilerIDE:
                 
                 # Obtener valor - priorizar valor_calculado si existe
                 valor_mostrar = ""
+                
                 if hasattr(nodo, 'valor_calculado'):
                     valor_calc = nodo.valor_calculado
                     if isinstance(valor_calc, bool):
@@ -802,21 +803,24 @@ class CompilerIDE:
                     else:
                         # Si no tiene valor (asignaciones directas), solo mostrar el número
                         valor_mostrar = valor_calc_str
-                elif hasattr(nodo, 'valor_semantico') and nodo.valor_semantico is not None:
-                    valor_mostrar = str(nodo.valor_semantico)
-                elif hasattr(nodo, 'valor') and nodo.valor is not None:
-                    # Si es un valor directo y el tipo es float, asegurar formato float
-                    if tipo_sem == "float" and isinstance(nodo.valor, (int, float, str)):
-                        try:
-                            val_num = float(nodo.valor)
-                            if val_num == int(val_num):
-                                valor_mostrar = f"{val_num:.1f}"
-                            else:
-                                valor_mostrar = str(val_num)
-                        except:
+                
+                # Solo procesar valor_semantico o valor si NO se estableció valor_mostrar con valor_calculado
+                if not valor_mostrar:
+                    if hasattr(nodo, 'valor_semantico') and nodo.valor_semantico is not None:
+                        valor_mostrar = str(nodo.valor_semantico)
+                    elif hasattr(nodo, 'valor') and nodo.valor is not None:
+                        # Si es un valor directo y el tipo es float, asegurar formato float
+                        if tipo_sem == "float" and isinstance(nodo.valor, (int, float, str)):
+                            try:
+                                val_num = float(nodo.valor)
+                                if val_num == int(val_num):
+                                    valor_mostrar = f"{val_num:.1f}"
+                                else:
+                                    valor_mostrar = str(val_num)
+                            except:
+                                valor_mostrar = str(nodo.valor)
+                        else:
                             valor_mostrar = str(nodo.valor)
-                    else:
-                        valor_mostrar = str(nodo.valor)
                 
                 # Agregar valor al texto del nodo si existe
                 if valor_mostrar:
