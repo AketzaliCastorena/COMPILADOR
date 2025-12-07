@@ -107,6 +107,7 @@ class CompilerIDE:
         menu_compilador.menu.add_command(label="Léxico", command=self.lexical_analysis)
         menu_compilador.menu.add_command(label="Sintáctico", command=self.syntax_analysis)
         menu_compilador.menu.add_command(label="Semántico", command=self.semantic_analysis)
+        menu_compilador.menu.add_command(label="Recargar Generador P", command=self.reload_semantic_module)
         menu_compilador.menu.add_separator()
         menu_compilador.menu.add_command(label="Compilar", command=self.execute_code)
 
@@ -151,6 +152,10 @@ class CompilerIDE:
             button.pack(side=tk.LEFT, padx=5)
             self.create_tooltip(button, btn["tooltip"])
             button.config(command=btn["command"])
+        # Botón para recargar el módulo del generador sin reiniciar la aplicación
+        btn_reload = tk.Button(toolbar, text="🔁", bg=self.colors["bg_toolbar"], fg=self.colors["fg_toolbar"],
+                               font=('Arial', 14), relief=tk.FLAT, bd=0, padx=8, pady=3, command=self.reload_semantic_module)
+        btn_reload.pack(side=tk.LEFT, padx=5)
         
         # Indicador de archivo actual
         self.file_indicator = tk.Label(toolbar, text="Sin archivo", bg=self.colors["bg_toolbar"], 
@@ -429,6 +434,17 @@ class CompilerIDE:
             error_text = self.lexical_errors.winfo_children()[0]
             error_text.insert(tk.END, f"Error al realizar análisis léxico: {str(e)}\n", "error")
 
+    def reload_semantic_module(self):
+        """Recarga analisis_semantico para reflejar cambios en caliente."""
+        try:
+            import importlib, analisis_semantico as _sem_mod
+            importlib.reload(_sem_mod)
+            messagebox.showinfo("Recarga", "Módulo 'analisis_semantico' recargado correctamente.")
+            self.status_label.config(text="Módulo 'analisis_semantico' recargado")
+        except Exception as e:
+            messagebox.showerror("Recarga", f"Error recargando el módulo: {e}")
+            self.status_label.config(text="Error recargando 'analisis_semantico'")
+
 
     def get_token_color(self, token_type):
         """Devuelve el color correspondiente al tipo de token"""
@@ -688,12 +704,32 @@ class CompilerIDE:
                 )
             
             # Ejecutar análisis semántico
-            analizador = AnalizadorSemantico(ast)
-            tabla_simbolos, errores, advertencias, codigo_intermedio, semantico_detalle = analizador.analizar()
+            # Recargar el módulo de análisis semántico para reflejar cambios en tiempo de desarrollo
+            try:
+                import importlib, analisis_semantico as _sem_mod
+                importlib.reload(_sem_mod)
+                AnalizadorSemanticoLocal = _sem_mod.AnalizadorSemantico
+            except Exception:
+                # Fallback al import estático en caso de error
+                AnalizadorSemanticoLocal = AnalizadorSemantico
+
+            analizador = AnalizadorSemanticoLocal(ast)
+            tabla_simbolos, errores, advertencias, codigo_intermedio, semantico_detalle, codigo_p = analizador.analizar()
             
             # Eliminar el widget anterior en la pestaña semántica
             for widget in self.semantic_tab.winfo_children():
                 widget.destroy()
+
+            # DEBUG: imprimir en consola el código intermedio y Código P que devuelve el analizador
+            try:
+                print("--- DEBUG: código_intermedio (desde IDE) ---")
+                for i, ins in enumerate(codigo_intermedio, 1):
+                    print(f"{i:3d}: {ins}")
+                print("--- DEBUG: codigo_p (desde IDE) ---")
+                for i, ins in enumerate(codigo_p, 1):
+                    print(f"{i:3d}: {ins}")
+            except Exception as _:
+                pass
             
             # Crear frame principal para el árbol semántico
             main_frame = tk.Frame(self.semantic_tab)
@@ -906,24 +942,27 @@ class CompilerIDE:
             text_tabla.tag_configure("separator", foreground="#95a5a6")
             text_tabla.tag_configure("info", foreground="#27ae60", font=("Consolas", 10, "bold"))
             
-            # Mostrar código intermedio
+            # Mostrar solo Código P (nemónicos)
             text_codigo = self.intermediate_code_tab.winfo_children()[0]
             text_codigo.insert(tk.END, "=" * 80 + "\n", "header")
-            text_codigo.insert(tk.END, "CÓDIGO INTERMEDIO (Tres Direcciones)\n", "header")
+            text_codigo.insert(tk.END, "CÓDIGO P (Nemónicos de Máquina)\n", "header")
             text_codigo.insert(tk.END, "=" * 80 + "\n\n", "header")
-            
-            if codigo_intermedio:
-                for i, instruccion in enumerate(codigo_intermedio, 1):
-                    text_codigo.insert(tk.END, f"{i:3d}:  {instruccion}\n")
+
+            if codigo_p:
+                # Marcador visible para identificar la versión del generador en la UI
+                text_codigo.insert(tk.END, f"  : ; Generador activo: etiquetas LAB/L y saltos FJP/UJP\n", "codigo_p")
+                for i, instruccion in enumerate(codigo_p, 1):
+                    text_codigo.insert(tk.END, f"{i:3d}:  {instruccion}\n", "codigo_p")
                 text_codigo.insert(tk.END, "\n" + "=" * 80 + "\n", "separator")
-                text_codigo.insert(tk.END, f"Total de instrucciones: {len(codigo_intermedio)}\n", "info")
+                text_codigo.insert(tk.END, f"Total de instrucciones P: {len(codigo_p)}\n", "info")
             else:
-                text_codigo.insert(tk.END, "No se generó código intermedio.\n", "info")
-            
+                text_codigo.insert(tk.END, "No se generó código P.\n", "info")
+
             # Configurar estilos
             text_codigo.tag_configure("header", foreground="#2c3e50", font=("Consolas", 11, "bold"))
             text_codigo.tag_configure("separator", foreground="#95a5a6")
             text_codigo.tag_configure("info", foreground="#27ae60", font=("Consolas", 10, "bold"))
+            text_codigo.tag_configure("codigo_p", foreground="#8e44ad", font=("Consolas", 10))
             
             # Mostrar errores semánticos
             text_errores = self.semantic_errors.winfo_children()[0]
@@ -1064,8 +1103,16 @@ class CompilerIDE:
             status_label.config(text="Fase 3: Análisis Semántico...")
             compile_window.update()
             
-            analizador = AnalizadorSemantico(ast)
-            tabla_simbolos, sem_errors, advertencias, codigo_intermedio = analizador.analizar()
+            # Recargar el módulo de análisis semántico para reflejar cambios en tiempo de desarrollo
+            try:
+                import importlib, analisis_semantico as _sem_mod
+                importlib.reload(_sem_mod)
+                AnalizadorSemanticoLocal = _sem_mod.AnalizadorSemantico
+            except Exception:
+                AnalizadorSemanticoLocal = AnalizadorSemantico
+
+            analizador = AnalizadorSemanticoLocal(ast)
+            tabla_simbolos, sem_errors, advertencias, codigo_intermedio, semantico_detalle, codigo_p = analizador.analizar()
             
             actualizar_estado("Análisis Semántico", len(sem_errors) == 0)
             text_result.insert(tk.END, "═" * 80 + "\n", "header")

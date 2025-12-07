@@ -1,0 +1,84 @@
+Ejemplo de programa para probar la generación de código P:
+
+main {
+    int x, y, z;
+    float a;
+    
+    x = 10;
+    y = 5;
+    z = x + y;
+    a = 3.14;
+    
+    if (x > y) {
+        z = x - y;
+    } else {
+        z = y - x;
+    }
+    
+    cin >> x;
+    cout << z;
+}
+
+Este programa generará:
+
+CÓDIGO INTERMEDIO (Tres Direcciones):
+- DECLARE x int
+- DECLARE y int
+- DECLARE z int
+- DECLARE a float
+- x = 10
+- y = 5
+- t0 = x + y
+- z = t0
+- a = 3.14
+- t1 = x > y
+- if not t1 goto L1
+- t2 = x - y
+- z = t2
+- goto L2
+- L1:
+- t3 = y - x
+- z = t3
+- L2:
+- READ x
+- WRITE z
+
+CÓDIGO P (Nemónicos):
+- ldc 10         ; Cargar constante 10
+- sto 0          ; Almacenar en x (dirección 0)
+- ldc 5          ; Cargar constante 5
+- sto 1          ; Almacenar en y (dirección 1)
+- lod 0          ; Cargar x
+- lod 1          ; Cargar y
+- adi            ; Sumar
+- sto 3          ; Almacenar en t0
+- lod 3          ; Cargar t0
+- sto 2          ; Almacenar en z
+- ldc 3.14       ; Cargar constante 3.14
+- sto 4          ; Almacenar en a
+- lod 0          ; Cargar x
+- lod 1          ; Cargar y
+- grt            ; Mayor que
+- sto 5          ; Almacenar en t1
+- lod 5          ; Cargar t1
+- fjp L1         ; Saltar a L1 si falso
+- lod 0          ; Cargar x
+- lod 1          ; Cargar y
+- sbi            ; Restar
+- sto 6          ; Almacenar en t2
+- lod 6          ; Cargar t2
+- sto 2          ; Almacenar en z
+- ujp L2         ; Saltar a L2
+- lab L1         ; Etiqueta L1
+- lod 1          ; Cargar y
+- lod 0          ; Cargar x
+- sbi            ; Restar
+- sto 7          ; Almacenar en t3
+- lod 7          ; Cargar t3
+- sto 2          ; Almacenar en z
+- lab L2         ; Etiqueta L2
+- rd             ; Leer entrada
+- sto 0          ; Almacenar en x
+- lod 2          ; Cargar z
+- wr             ; Escribir salida
+- hlt            ; Detener programa

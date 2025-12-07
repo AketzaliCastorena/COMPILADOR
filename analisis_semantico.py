@@ -104,6 +104,8 @@ class GeneradorCodigoIntermedio:
         self.codigo = []
         self.temp_counter = 0
         self.label_counter = 0
+        self.variables = {}  # Mapeo de variables a direcciones de memoria
+        self.dir_counter = 0
     
     def nuevo_temporal(self):
         """Genera un nuevo temporal"""
@@ -130,6 +132,175 @@ class GeneradorCodigoIntermedio:
     def obtener_codigo(self):
         """Retorna el código generado"""
         return self.codigo
+    
+    def obtener_direccion(self, var):
+        """Obtiene o asigna dirección de memoria a una variable"""
+        if var not in self.variables:
+            self.variables[var] = self.dir_counter
+            self.dir_counter += 1
+        return self.variables[var]
+    
+    def generar_codigo_p(self):
+        """Genera código P a partir del código de tres direcciones"""
+        codigo_p = []
+
+        # Añadir comentario identificador del generador (útil para confirmar versión en UI)
+        codigo_p.append('; Generador: etiquetas LAB/L y saltos FJP/UJP')
+
+        def es_numero(s):
+            try:
+                float(s)
+                return True
+            except Exception:
+                return False
+
+        # Traducción instrucción a instrucción manteniendo etiquetas simbólicas
+        for instruccion in self.codigo:
+            inst = instruccion.strip()
+
+            # Comentarios
+            if inst.startswith('#'):
+                codigo_p.append(f"; {inst[1:].strip()}")
+                continue
+
+            # DECLARE var tipo -> reservar dirección (no emite instrucción de máquina)
+            if inst.startswith('DECLARE'):
+                partes = inst.split()
+                if len(partes) >= 2:
+                    var = partes[1]
+                    self.obtener_direccion(var)
+                continue
+
+            # READ var
+            if inst.startswith('READ'):
+                var = inst.split()[1]
+                dir_var = self.obtener_direccion(var)
+                codigo_p.append('rd')
+                codigo_p.append(f'sto {dir_var}')
+                continue
+
+            # WRITE var
+            if inst.startswith('WRITE'):
+                var = inst.split()[1]
+                dir_var = self.obtener_direccion(var)
+                codigo_p.append(f'lod {dir_var}')
+                codigo_p.append('wr')
+                continue
+
+            # Etiqueta sintáctica (ej: L0:)
+            if inst.endswith(':') and not '=' in inst:
+                label = inst.replace(':', '').strip()
+                # Emitir ambas formas para claridad: definición y marca de posición
+                codigo_p.append(f'LAB {label}:')
+                codigo_p.append(f'{label}:')
+                continue
+
+            # Salto incondicional
+            if inst.startswith('goto'):
+                label = inst.split()[1]
+                codigo_p.append(f'UJP {label}')
+                continue
+
+            # if not <cond> goto <label>
+            if inst.startswith('if not'):
+                partes = inst.split()
+                # formato esperado: if not <cond> goto <label>
+                if len(partes) >= 5:
+                    cond = partes[2]
+                    label = partes[4]
+                    # Manejar literales numéricos y booleanos
+                    if es_numero(cond):
+                        codigo_p.append(f'ldc {cond}')
+                    elif cond in ('True', 'true', 'False', 'false'):
+                        # traducir booleanos a 1/0
+                        val = '1' if cond.lower() == 'true' else '0'
+                        codigo_p.append(f'ldc {val}')
+                    else:
+                        dir_cond = self.obtener_direccion(cond)
+                        codigo_p.append(f'lod {dir_cond}')
+                    codigo_p.append(f'FJP {label}')
+                    continue
+
+            # if <cond> goto <label>  (forma alternativa)
+            if inst.startswith('if') and 'not' not in inst:
+                partes = inst.split()
+                if len(partes) >= 4:
+                    cond = partes[1]
+                    label = partes[3]
+                    if es_numero(cond):
+                        codigo_p.append(f'ldc {cond}')
+                    elif cond in ('True', 'true', 'False', 'false'):
+                        val = '1' if cond.lower() == 'true' else '0'
+                        codigo_p.append(f'ldc {val}')
+                    else:
+                        dir_cond = self.obtener_direccion(cond)
+                        codigo_p.append(f'lod {dir_cond}')
+                    # comparar con cero -> si igual a 0 entonces falso
+                    codigo_p.append('ldc 0')
+                    codigo_p.append('equ')
+                    codigo_p.append(f'FJP {label}')
+                    continue
+
+            # Asignaciones y operaciones
+            if '=' in inst:
+                destino, expresion = inst.split('=', 1)
+                destino = destino.strip()
+                expresion = expresion.strip()
+
+                # caso constante simple
+                if es_numero(expresion):
+                    dir_dest = self.obtener_direccion(destino)
+                    codigo_p.append(f'ldc {expresion}')
+                    codigo_p.append(f'sto {dir_dest}')
+                    continue
+
+                # operadores soportados
+                operadores = {
+                    '==': 'equ', '!=': 'neq', '<=': 'leq', '>=': 'geq',
+                    '&&': 'and', '||': 'or',
+                    '<': 'les', '>': 'grt',
+                    '+': 'adi', '-': 'sbi', '*': 'mpi', '/': 'dvi', '%': 'mod', '**': 'pot'
+                }
+
+                encontrado = False
+                # buscar operadores de mayor longitud primero
+                for op in sorted(operadores.keys(), key=lambda x: -len(x)):
+                    if f' {op} ' in expresion:
+                        op1, op2 = map(str.strip, expresion.split(op, 1))
+                        # cargar operandos
+                        if es_numero(op1):
+                            codigo_p.append(f'ldc {op1}')
+                        else:
+                            codigo_p.append(f'lod {self.obtener_direccion(op1)}')
+                        if es_numero(op2):
+                            codigo_p.append(f'ldc {op2}')
+                        else:
+                            codigo_p.append(f'lod {self.obtener_direccion(op2)}')
+
+                        nem = operadores[op]
+                        if nem == 'neq':
+                            # Implementar != como equ + ldc 0 + equ (negación)
+                            codigo_p.append('equ')
+                            codigo_p.append('ldc 0')
+                            codigo_p.append('equ')
+                        else:
+                            codigo_p.append(nem)
+
+                        codigo_p.append(f'sto {self.obtener_direccion(destino)}')
+                        encontrado = True
+                        break
+
+                if encontrado:
+                    continue
+
+                # Asignación simple var = var
+                codigo_p.append(f'lod {self.obtener_direccion(expresion)}')
+                codigo_p.append(f'sto {self.obtener_direccion(destino)}')
+                continue
+
+        # finalizar programa
+        codigo_p.append('hlt')
+        return codigo_p
 
 
 class AnalizadorSemantico:
@@ -156,10 +327,14 @@ class AnalizadorSemantico:
             # Recolectar información semántica detallada
             semantico_detalle = []
             self.recolectar_info_semantica(self.ast, semantico_detalle)
-            return self.tabla_simbolos, self.errores, self.advertencias, self.generador.obtener_codigo(), semantico_detalle
+            
+            # Generar código P
+            codigo_p = self.generador.generar_codigo_p()
+            
+            return self.tabla_simbolos, self.errores, self.advertencias, self.generador.obtener_codigo(), semantico_detalle, codigo_p
         except Exception as e:
             self.errores.append(f"Error crítico en análisis semántico: {str(e)}")
-            return self.tabla_simbolos, self.errores, self.advertencias, [], []
+            return self.tabla_simbolos, self.errores, self.advertencias, [], [], []
 
     def recolectar_info_semantica(self, nodo, resultado):
         """Recorre el AST y recolecta información semántica por nodo"""
