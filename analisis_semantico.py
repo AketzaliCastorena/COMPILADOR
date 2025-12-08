@@ -145,7 +145,7 @@ class GeneradorCodigoIntermedio:
         codigo_p = []
 
         # Añadir comentario identificador del generador (útil para confirmar versión en UI)
-        codigo_p.append('; Generador: etiquetas LAB/L y saltos FJP/UJP')
+        codigo_p.append('; Generador: etiquetas lab/fjp/ujp (minusculas)')
 
         def es_numero(s):
             try:
@@ -154,13 +154,29 @@ class GeneradorCodigoIntermedio:
             except Exception:
                 return False
 
+        # Pre-analizar para detectar temporales que solo se usan en condiciones
+        temporales_en_condicion = set()
+        for i, instruccion in enumerate(self.codigo):
+            inst = instruccion.strip()
+            # Detectar: temporal = comparación seguido de if not temporal
+            if '=' in inst and i + 1 < len(self.codigo):
+                next_inst = self.codigo[i + 1].strip()
+                if next_inst.startswith('if not') or next_inst.startswith('if '):
+                    destino = inst.split('=')[0].strip()
+                    if destino.startswith('t'):
+                        temporales_en_condicion.add(destino)
+
         # Traducción instrucción a instrucción manteniendo etiquetas simbólicas
-        for instruccion in self.codigo:
+        i = 0
+        while i < len(self.codigo):
+            instruccion = self.codigo[i]
+            inst = instruccion.strip()
             inst = instruccion.strip()
 
             # Comentarios
             if inst.startswith('#'):
                 codigo_p.append(f"; {inst[1:].strip()}")
+                i += 1
                 continue
 
             # DECLARE var tipo -> reservar dirección (no emite instrucción de máquina)
@@ -169,6 +185,7 @@ class GeneradorCodigoIntermedio:
                 if len(partes) >= 2:
                     var = partes[1]
                     self.obtener_direccion(var)
+                i += 1
                 continue
 
             # READ var
@@ -177,28 +194,43 @@ class GeneradorCodigoIntermedio:
                 dir_var = self.obtener_direccion(var)
                 codigo_p.append('rd')
                 codigo_p.append(f'sto {dir_var}')
+                i += 1
                 continue
 
-            # WRITE var
+            # WRITE var o literal
             if inst.startswith('WRITE'):
-                var = inst.split()[1]
-                dir_var = self.obtener_direccion(var)
-                codigo_p.append(f'lod {dir_var}')
-                codigo_p.append('wr')
+                partes = inst.split(None, 1)
+                if len(partes) >= 2:
+                    valor = partes[1]
+                    # Si es una cadena literal (empieza con comilla)
+                    if valor.startswith('"') or valor.startswith("'"):
+                        codigo_p.append(f'ldc {valor}')
+                        codigo_p.append('wr')
+                    # Si es un número literal
+                    elif es_numero(valor):
+                        codigo_p.append(f'ldc {valor}')
+                        codigo_p.append('wr')
+                    # Si es una variable
+                    else:
+                        dir_var = self.obtener_direccion(valor)
+                        codigo_p.append(f'lod {dir_var}')
+                        codigo_p.append('wr')
+                i += 1
                 continue
 
             # Etiqueta sintáctica (ej: L0:)
             if inst.endswith(':') and not '=' in inst:
                 label = inst.replace(':', '').strip()
-                # Emitir ambas formas para claridad: definición y marca de posición
-                codigo_p.append(f'LAB {label}:')
-                codigo_p.append(f'{label}:')
+                # Emitir etiqueta en formato: lab L0
+                codigo_p.append(f'lab {label}')
+                i += 1
                 continue
 
             # Salto incondicional
             if inst.startswith('goto'):
                 label = inst.split()[1]
-                codigo_p.append(f'UJP {label}')
+                codigo_p.append(f'ujp {label}')
+                i += 1
                 continue
 
             # if not <cond> goto <label>
@@ -208,17 +240,20 @@ class GeneradorCodigoIntermedio:
                 if len(partes) >= 5:
                     cond = partes[2]
                     label = partes[4]
-                    # Manejar literales numéricos y booleanos
-                    if es_numero(cond):
-                        codigo_p.append(f'ldc {cond}')
-                    elif cond in ('True', 'true', 'False', 'false'):
-                        # traducir booleanos a 1/0
-                        val = '1' if cond.lower() == 'true' else '0'
-                        codigo_p.append(f'ldc {val}')
-                    else:
-                        dir_cond = self.obtener_direccion(cond)
-                        codigo_p.append(f'lod {dir_cond}')
-                    codigo_p.append(f'FJP {label}')
+                    # Si el temporal ya NO fue almacenado, no cargarlo
+                    if cond not in temporales_en_condicion:
+                        # Manejar literales numéricos y booleanos
+                        if es_numero(cond):
+                            codigo_p.append(f'ldc {cond}')
+                        elif cond in ('True', 'true', 'False', 'false'):
+                            # traducir booleanos a 1/0
+                            val = '1' if cond.lower() == 'true' else '0'
+                            codigo_p.append(f'ldc {val}')
+                        else:
+                            dir_cond = self.obtener_direccion(cond)
+                            codigo_p.append(f'lod {dir_cond}')
+                    codigo_p.append(f'fjp {label}')
+                    i += 1
                     continue
 
             # if <cond> goto <label>  (forma alternativa)
@@ -227,18 +262,20 @@ class GeneradorCodigoIntermedio:
                 if len(partes) >= 4:
                     cond = partes[1]
                     label = partes[3]
-                    if es_numero(cond):
-                        codigo_p.append(f'ldc {cond}')
-                    elif cond in ('True', 'true', 'False', 'false'):
-                        val = '1' if cond.lower() == 'true' else '0'
-                        codigo_p.append(f'ldc {val}')
-                    else:
-                        dir_cond = self.obtener_direccion(cond)
-                        codigo_p.append(f'lod {dir_cond}')
+                    if cond not in temporales_en_condicion:
+                        if es_numero(cond):
+                            codigo_p.append(f'ldc {cond}')
+                        elif cond in ('True', 'true', 'False', 'false'):
+                            val = '1' if cond.lower() == 'true' else '0'
+                            codigo_p.append(f'ldc {val}')
+                        else:
+                            dir_cond = self.obtener_direccion(cond)
+                            codigo_p.append(f'lod {dir_cond}')
                     # comparar con cero -> si igual a 0 entonces falso
                     codigo_p.append('ldc 0')
                     codigo_p.append('equ')
-                    codigo_p.append(f'FJP {label}')
+                    codigo_p.append(f'fjp {label}')
+                    i += 1
                     continue
 
             # Asignaciones y operaciones
@@ -252,6 +289,7 @@ class GeneradorCodigoIntermedio:
                     dir_dest = self.obtener_direccion(destino)
                     codigo_p.append(f'ldc {expresion}')
                     codigo_p.append(f'sto {dir_dest}')
+                    i += 1
                     continue
 
                 # operadores soportados
@@ -286,17 +324,24 @@ class GeneradorCodigoIntermedio:
                         else:
                             codigo_p.append(nem)
 
-                        codigo_p.append(f'sto {self.obtener_direccion(destino)}')
+                        # Solo almacenar si NO es un temporal usado solo en condición
+                        if destino not in temporales_en_condicion:
+                            codigo_p.append(f'sto {self.obtener_direccion(destino)}')
                         encontrado = True
                         break
 
                 if encontrado:
+                    i += 1
                     continue
 
                 # Asignación simple var = var
                 codigo_p.append(f'lod {self.obtener_direccion(expresion)}')
                 codigo_p.append(f'sto {self.obtener_direccion(destino)}')
+                i += 1
                 continue
+            
+            # Incrementar contador si no hubo continue
+            i += 1
 
         # finalizar programa
         codigo_p.append('hlt')
@@ -773,29 +818,48 @@ class AnalizadorSemantico:
                     f"Advertencia: La condición del 'if' debería ser de tipo 'bool', se recibió '{tipo_cond}'"
                 )
             
-            # Generar código intermedio
-            label_else = self.generador.nueva_etiqueta()
-            label_fin = self.generador.nueva_etiqueta()
-            
-            self.generador.agregar(f"if not {temp_cond} goto {label_else}")
-            
-            # Bloque then
-            if len(nodo.hijos) > condicion_idx + 1:
-                self.visitar(nodo.hijos[condicion_idx + 1])
-            
-            self.generador.agregar(f"goto {label_fin}")
-            self.generador.agregar(f"{label_else}:")
-            
-            # Bloque else (si existe)
+            # Verificar si hay bloque else
+            tiene_else = False
             if len(nodo.hijos) > condicion_idx + 2:
-                # Verificar si hay un nodo RESERVADA "else"
                 else_idx = condicion_idx + 2
                 if nodo.hijos[else_idx].tipo == "RESERVADA":
                     else_idx += 1
                 if len(nodo.hijos) > else_idx:
-                    self.visitar(nodo.hijos[else_idx])
+                    tiene_else = True
             
-            self.generador.agregar(f"{label_fin}:")
+            # Generar código intermedio optimizado
+            if tiene_else:
+                # If con else: necesita label_else y label_fin
+                label_else = self.generador.nueva_etiqueta()
+                label_fin = self.generador.nueva_etiqueta()
+                
+                self.generador.agregar(f"if not {temp_cond} goto {label_else}")
+                
+                # Bloque then
+                if len(nodo.hijos) > condicion_idx + 1:
+                    self.visitar(nodo.hijos[condicion_idx + 1])
+                
+                self.generador.agregar(f"goto {label_fin}")
+                self.generador.agregar(f"{label_else}:")
+                
+                # Bloque else
+                else_idx = condicion_idx + 2
+                if nodo.hijos[else_idx].tipo == "RESERVADA":
+                    else_idx += 1
+                self.visitar(nodo.hijos[else_idx])
+                
+                self.generador.agregar(f"{label_fin}:")
+            else:
+                # If sin else: solo necesita label_fin
+                label_fin = self.generador.nueva_etiqueta()
+                
+                self.generador.agregar(f"if not {temp_cond} goto {label_fin}")
+                
+                # Bloque then
+                if len(nodo.hijos) > condicion_idx + 1:
+                    self.visitar(nodo.hijos[condicion_idx + 1])
+                
+                self.generador.agregar(f"{label_fin}:")
         
         return None
     
@@ -869,24 +933,39 @@ class AnalizadorSemantico:
     
     def visitar_sent_out(self, nodo):
         """Visita sentencia cout (salida)"""
+        # DEBUG: imprimir estructura del nodo para depuración
+        print(f"DEBUG sent_out: nodo tiene {len(nodo.hijos)} hijos")
+        for i, hijo in enumerate(nodo.hijos):
+            print(f"  Hijo {i}: tipo={hijo.tipo}, valor={hijo.valor if hasattr(hijo, 'valor') else 'N/A'}")
+        
         # Visitar todos los identificadores o valores a imprimir
         for hijo in nodo.hijos:
-            if hijo.tipo == "id":
-                simbolo = self.tabla_simbolos.buscar(hijo.valor)
-                if simbolo is None:
-                    self.errores.append(
-                        f"Error semántico en L{hijo.linea} C{hijo.columna}: "
-                        f"Variable '{hijo.valor}' no declarada"
-                    )
-                else:
-                    if not simbolo.inicializado:
-                        self.advertencias.append(
-                            f"Advertencia en L{hijo.linea} C{hijo.columna}: "
-                            f"Variable '{hijo.valor}' puede no estar inicializada"
-                        )
-                    self.tabla_simbolos.marcar_usado(hijo.valor, hijo.linea)
+            if hijo.tipo == "RESERVADA" and hijo.valor in ["cout", "<<"]:
+                # Ignorar palabras reservadas cout y <<
+                continue
+            elif hijo.tipo == "id":
+                # Verificar si el valor empieza con comilla (cadena literal tokenizada como id)
+                if hasattr(hijo, 'valor') and isinstance(hijo.valor, str) and hijo.valor.startswith('"'):
+                    # Es una cadena literal
                     self.generador.agregar(f"WRITE {hijo.valor}")
+                else:
+                    # Es un identificador de variable
+                    simbolo = self.tabla_simbolos.buscar(hijo.valor)
+                    if simbolo is None:
+                        self.errores.append(
+                            f"Error semántico en L{hijo.linea} C{hijo.columna}: "
+                            f"Variable '{hijo.valor}' no declarada"
+                        )
+                    else:
+                        if not simbolo.inicializado:
+                            self.advertencias.append(
+                                f"Advertencia en L{hijo.linea} C{hijo.columna}: "
+                                f"Variable '{hijo.valor}' puede no estar inicializada"
+                            )
+                        self.tabla_simbolos.marcar_usado(hijo.valor, hijo.linea)
+                        self.generador.agregar(f"WRITE {hijo.valor}")
             elif hijo.tipo in ["NUMERO_ENTERO", "NUMERO_REAL", "CADENA"]:
+                # Generar WRITE con el valor
                 self.generador.agregar(f"WRITE {hijo.valor}")
         
         return None

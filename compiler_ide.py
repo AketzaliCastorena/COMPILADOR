@@ -704,15 +704,12 @@ class CompilerIDE:
                 )
             
             # Ejecutar análisis semántico
-            # Recargar el módulo de análisis semántico para reflejar cambios en tiempo de desarrollo
-            try:
-                import importlib, analisis_semantico as _sem_mod
-                importlib.reload(_sem_mod)
-                AnalizadorSemanticoLocal = _sem_mod.AnalizadorSemantico
-            except Exception:
-                # Fallback al import estático en caso de error
-                AnalizadorSemanticoLocal = AnalizadorSemantico
-
+            # FORZAR recarga automática del módulo para reflejar cambios inmediatamente
+            import importlib
+            import analisis_semantico as _sem_mod
+            importlib.reload(_sem_mod)
+            AnalizadorSemanticoLocal = _sem_mod.AnalizadorSemantico
+            
             analizador = AnalizadorSemanticoLocal(ast)
             tabla_simbolos, errores, advertencias, codigo_intermedio, semantico_detalle, codigo_p = analizador.analizar()
             
@@ -942,17 +939,82 @@ class CompilerIDE:
             text_tabla.tag_configure("separator", foreground="#95a5a6")
             text_tabla.tag_configure("info", foreground="#27ae60", font=("Consolas", 10, "bold"))
             
-            # Mostrar solo Código P (nemónicos)
+            # Mostrar Código P con descripciones
             text_codigo = self.intermediate_code_tab.winfo_children()[0]
-            text_codigo.insert(tk.END, "=" * 80 + "\n", "header")
-            text_codigo.insert(tk.END, "CÓDIGO P (Nemónicos de Máquina)\n", "header")
-            text_codigo.insert(tk.END, "=" * 80 + "\n\n", "header")
 
             if codigo_p:
-                # Marcador visible para identificar la versión del generador en la UI
-                text_codigo.insert(tk.END, f"  : ; Generador activo: etiquetas LAB/L y saltos FJP/UJP\n", "codigo_p")
-                for i, instruccion in enumerate(codigo_p, 1):
-                    text_codigo.insert(tk.END, f"{i:3d}:  {instruccion}\n", "codigo_p")
+                # Diccionario de descripciones para cada nemónico
+                descripciones = {
+                    'ldc': 'carga constante entero',
+                    'lod': 'carga variable desde dirección',
+                    'sto': 'almacena resultado en variable',
+                    'adi': 'suma (addition)',
+                    'sbi': 'resta (subtraction)',
+                    'mpi': 'multiplicación',
+                    'dvi': 'división',
+                    'mod': 'módulo (residuo) de dos valores en pila',
+                    'leq': 'comparación menor o igual que',
+                    'geq': 'comparación mayor o igual que',
+                    'les': 'comparación menor que',
+                    'grt': 'comparación mayor que',
+                    'equ': 'comparación igualdad',
+                    'neq': 'comparación diferente',
+                    'and': 'operación lógica AND',
+                    'or': 'operación lógica OR',
+                    'lab': 'etiqueta (marca posición)',
+                    'fjp': 'si condición es falsa, salta a etiqueta',
+                    'ujp': 'salto incondicional a etiqueta',
+                    'rd': 'leer entrada del usuario',
+                    'wr': 'escribir salida',
+                    'hlt': 'detener programa'
+                }
+                
+                # Función para obtener descripción de una instrucción
+                def obtener_descripcion(instruccion):
+                    inst = instruccion.strip()
+                    if inst.startswith(';'):
+                        return ''
+                    
+                    partes = inst.split()
+                    if not partes:
+                        return ''
+                    
+                    nemonico = partes[0].lower()
+                    
+                    # Casos especiales
+                    if nemonico == 'lab':
+                        if len(partes) > 1:
+                            return f'etiqueta entrada del ciclo/bloque {partes[1]}'
+                    elif nemonico == 'fjp':
+                        if len(partes) > 1:
+                            return f'si condición es falsa, salta al fin {partes[1]}'
+                    elif nemonico == 'ujp':
+                        if len(partes) > 1:
+                            return f'salto incondicional a {partes[1]}'
+                    elif nemonico == 'ldc':
+                        if len(partes) > 1:
+                            return f'carga constante entero {partes[1]}'
+                    elif nemonico == 'lod':
+                        if len(partes) > 1:
+                            return f"carga variable desde dirección {partes[1]}"
+                    elif nemonico == 'sto':
+                        if len(partes) > 1:
+                            return f"almacena resultado en dirección {partes[1]}"
+                    
+                    return descripciones.get(nemonico, '')
+                
+                # Crear encabezado de tabla
+                text_codigo.insert(tk.END, f"{'Dir':<6} {'Instrucción':<20} {'Descripción'}\n", "header")
+                text_codigo.insert(tk.END, "=" * 80 + "\n", "separator")
+                
+                # Mostrar instrucciones con descripciones
+                for i, instruccion in enumerate(codigo_p):
+                    # Saltar comentarios de debug
+                    if instruccion.strip().startswith('; Generador'):
+                        continue
+                    
+                    descripcion = obtener_descripcion(instruccion)
+                    text_codigo.insert(tk.END, f"{i:<6} {instruccion:<20} {descripcion}\n", "codigo_p")
                 text_codigo.insert(tk.END, "\n" + "=" * 80 + "\n", "separator")
                 text_codigo.insert(tk.END, f"Total de instrucciones P: {len(codigo_p)}\n", "info")
             else:
@@ -1103,14 +1165,12 @@ class CompilerIDE:
             status_label.config(text="Fase 3: Análisis Semántico...")
             compile_window.update()
             
-            # Recargar el módulo de análisis semántico para reflejar cambios en tiempo de desarrollo
-            try:
-                import importlib, analisis_semantico as _sem_mod
-                importlib.reload(_sem_mod)
-                AnalizadorSemanticoLocal = _sem_mod.AnalizadorSemantico
-            except Exception:
-                AnalizadorSemanticoLocal = AnalizadorSemantico
-
+            # FORZAR recarga automática del módulo para reflejar cambios inmediatamente
+            import importlib
+            import analisis_semantico as _sem_mod
+            importlib.reload(_sem_mod)
+            AnalizadorSemanticoLocal = _sem_mod.AnalizadorSemantico
+            
             analizador = AnalizadorSemanticoLocal(ast)
             tabla_simbolos, sem_errors, advertencias, codigo_intermedio, semantico_detalle, codigo_p = analizador.analizar()
             
