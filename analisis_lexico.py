@@ -5,7 +5,7 @@ TOKEN_REGEX = [
     ("COMENTARIO_MULTILINEA", r"/\*.*?\*/", re.DOTALL),  # Comentarios tipo /* ... */
     ("COMENTARIO_SIMPLE", r"//.*"),                     # Comentarios tipo //
     ("CADENA", r'"(?:[^"\\]|\\.)*"'),                   # Cadenas literales entre comillas dobles
-    ("RESERVADA", r"\b(if|else|end|do|while|switch|case|int|float|main|cin|cout|then|repeat|read|write|until|true|false)\b"),
+    ("RESERVADA", r"\b(if|else|end|do|while|switch|case|int|float|bool|main|cin|cout|then|repeat|read|write|until|true|false|break)\b"),
     ("OPERADOR_ARIT", r"\+\+|--|[+\-*/%^]"),             # Operadores aritméticos
     ("OPERADOR_REL", r"<<|>>|<=|>=|==|!=|<|>"),          # << y >> primero
     ("OPERADOR_LOG", r"&&|\|\||!|&"),                    # Operadores lógicos

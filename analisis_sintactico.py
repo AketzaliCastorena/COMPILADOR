@@ -214,14 +214,39 @@ class AnalizadorSintactico:
         return nodo
 
     def parse_expresion(self):
+        """Parsea expresión lógica (AND, OR tienen menor precedencia)"""
+        nodo = self.parse_expresion_relacional()
+        if not nodo:
+            return None
+
+        while True:
+            token = self.obtener_token()
+            # Solo operadores lógicos aquí (&&, ||)
+            if token and token.tipo == "OPERADOR_LOG":
+                operador = self.coincidir("OPERADOR_LOG")
+                derecho = self.parse_expresion_relacional()
+                if not derecho:
+                    self.errores.append(f"Error: Falta expresión después de operador '{operador.lexema}'")
+                    break
+                nuevo = ASTNode("op", operador.lexema)
+                nuevo.agregar_hijo(nodo)
+                nuevo.agregar_hijo(derecho)
+                nodo = nuevo
+            else:
+                break
+        return nodo
+
+    def parse_expresion_relacional(self):
+        """Parsea expresión relacional (<, >, <=, >=, ==, !=)"""
         nodo = self.parse_expresion_simple()
         if not nodo:
             return None
 
         while True:
             token = self.obtener_token()
-            if token and token.tipo in ["OPERADOR_REL", "OPERADOR_LOG"]:
-                operador = self.coincidir(token.tipo)
+            # Solo operadores relacionales aquí (<, >, <=, >=, ==, !=)
+            if token and token.tipo == "OPERADOR_REL":
+                operador = self.coincidir("OPERADOR_REL")
                 derecho = self.parse_expresion_simple()
                 if not derecho:
                     self.errores.append(f"Error: Falta expresión después de operador '{operador.lexema}'")

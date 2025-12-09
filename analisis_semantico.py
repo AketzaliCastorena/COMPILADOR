@@ -156,6 +156,20 @@ class GeneradorCodigoIntermedio:
 
         # Pre-analizar para detectar temporales que solo se usan en condiciones
         temporales_en_condicion = set()
+        temporales_usados_en_operaciones = set()
+        
+        # Primero, detectar temporales usados en otras operaciones (como AND, OR)
+        for instruccion in self.codigo:
+            inst = instruccion.strip()
+            if '=' in inst:
+                _, expresion = inst.split('=', 1)
+                expresion = expresion.strip()
+                # Si la expresión contiene un temporal (t0, t1, etc.)
+                import re
+                temporales_en_expr = re.findall(r'\bt\d+\b', expresion)
+                temporales_usados_en_operaciones.update(temporales_en_expr)
+        
+        # Luego, detectar temporales que van directo a if
         for i, instruccion in enumerate(self.codigo):
             inst = instruccion.strip()
             # Detectar: temporal = comparación seguido de if not temporal
@@ -163,7 +177,8 @@ class GeneradorCodigoIntermedio:
                 next_inst = self.codigo[i + 1].strip()
                 if next_inst.startswith('if not') or next_inst.startswith('if '):
                     destino = inst.split('=')[0].strip()
-                    if destino.startswith('t'):
+                    # Solo optimizar si NO se usa en otras operaciones
+                    if destino.startswith('t') and destino not in temporales_usados_en_operaciones:
                         temporales_en_condicion.add(destino)
 
         # Traducción instrucción a instrucción manteniendo etiquetas simbólicas
@@ -586,10 +601,8 @@ class AnalizadorSemantico:
             # Almacenar el tipo semántico en el nodo
             nodo.tipo_semantico = simbolo.tipo
             
-            # Si la variable tiene un valor conocido, retornarlo para cálculos
-            if simbolo.valor is not None and isinstance(simbolo.valor, (int, float)):
-                return simbolo.tipo, simbolo.valor
-            
+            # Siempre retornar el nombre de la variable para el código intermedio
+            # (no optimizar sustituyendo por el valor, ya que la variable puede cambiar)
             return simbolo.tipo, nodo.valor
         
         # Operadores binarios
@@ -807,6 +820,11 @@ class AnalizadorSemantico:
     
     def visitar_seleccion(self, nodo):
         """Visita estructura if-else"""
+        # DEBUG: ver estructura del nodo if
+        print(f"DEBUG visitar_seleccion: nodo tiene {len(nodo.hijos)} hijos")
+        for i, hijo in enumerate(nodo.hijos):
+            print(f"  Hijo {i}: tipo={hijo.tipo}, valor={hijo.valor if hasattr(hijo, 'valor') else 'N/A'}")
+        
         # El primer hijo después de la palabra reservada es la condición
         condicion_idx = 1 if nodo.hijos and nodo.hijos[0].tipo == "RESERVADA" else 0
         

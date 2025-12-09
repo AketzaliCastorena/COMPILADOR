@@ -352,7 +352,7 @@ class CompilerIDE:
 
     def save_file(self):
         if self.filename:
-            with open(self.filename, "w") as file:
+            with open(self.filename, "w", encoding="utf-8") as file:
                 file.write(self.text_area.get(1.0, tk.END))
             self.status_label.config(text=f"Archivo guardado: {self.filename}")
             self.text_area.edit_modified(False)
@@ -943,6 +943,12 @@ class CompilerIDE:
             text_codigo = self.intermediate_code_tab.winfo_children()[0]
 
             if codigo_p:
+                # Obtener mapeo de direcciones a nombres de variables
+                mapeo_dir_var = {}
+                if hasattr(analizador.generador, 'variables'):
+                    # Invertir el diccionario: de {var: dir} a {dir: var}
+                    mapeo_dir_var = {str(dir): var for var, dir in analizador.generador.variables.items()}
+                
                 # Diccionario de descripciones para cada nemónico
                 descripciones = {
                     'ldc': 'carga constante entero',
@@ -993,13 +999,21 @@ class CompilerIDE:
                             return f'salto incondicional a {partes[1]}'
                     elif nemonico == 'ldc':
                         if len(partes) > 1:
-                            return f'carga constante entero {partes[1]}'
+                            valor = ' '.join(partes[1:])
+                            if valor.startswith('"'):
+                                return f'carga cadena literal {valor}'
+                            else:
+                                return f'carga constante entero {valor}'
                     elif nemonico == 'lod':
                         if len(partes) > 1:
-                            return f"carga variable desde dirección {partes[1]}"
+                            dir_num = partes[1]
+                            nombre_var = mapeo_dir_var.get(dir_num, f'dirección {dir_num}')
+                            return f"carga variable '{nombre_var}' desde dirección {dir_num}"
                     elif nemonico == 'sto':
                         if len(partes) > 1:
-                            return f"almacena resultado en dirección {partes[1]}"
+                            dir_num = partes[1]
+                            nombre_var = mapeo_dir_var.get(dir_num, f'dirección {dir_num}')
+                            return f"almacena resultado en variable '{nombre_var}' (dirección {dir_num})"
                     
                     return descripciones.get(nemonico, '')
                 
