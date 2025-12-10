@@ -299,6 +299,15 @@ class GeneradorCodigoIntermedio:
                 destino = destino.strip()
                 expresion = expresion.strip()
 
+                # Manejar valores booleanos (True/False)
+                if expresion in ('True', 'False', 'true', 'false'):
+                    dir_dest = self.obtener_direccion(destino)
+                    valor = '1' if expresion.lower() == 'true' else '0'
+                    codigo_p.append(f'ldc {valor}')
+                    codigo_p.append(f'sto {dir_dest}')
+                    i += 1
+                    continue
+
                 # caso constante simple
                 if es_numero(expresion):
                     dir_dest = self.obtener_direccion(destino)

@@ -4,13 +4,15 @@ Ejecuta las instrucciones generadas por el compilador
 """
 
 class InterpreteP:
-    def __init__(self):
+    def __init__(self, input_func=None, output_func=None):
         self.memoria = [0] * 1000  # Memoria para variables (1000 posiciones)
         self.pila = []              # Pila de operandos
         self.pc = 0                 # Program Counter (contador de programa)
         self.etiquetas = {}         # Mapa de etiquetas a líneas
         self.codigo = []            # Lista de instrucciones
         self.ejecutando = True
+        self.input_func = input_func if input_func else input
+        self.output_func = output_func if output_func else print
         
     def cargar_codigo(self, codigo_p):
         """Carga el código P y construye mapa de etiquetas"""
@@ -36,8 +38,6 @@ class InterpreteP:
         self.pc = 0
         self.ejecutando = True
         
-        print("\n=== INICIO DE EJECUCIÓN ===\n")
-        
         while self.ejecutando and self.pc < len(self.codigo):
             instruccion = self.codigo[self.pc]
             partes = instruccion.split(maxsplit=1)
@@ -48,8 +48,6 @@ class InterpreteP:
             self.ejecutar_instruccion(opcode, operando)
             
             self.pc += 1
-        
-        print("\n=== FIN DE EJECUCIÓN ===\n")
     
     def ejecutar_instruccion(self, opcode, operando):
         """Ejecuta una instrucción individual"""
@@ -94,7 +92,7 @@ class InterpreteP:
             if b != 0:
                 self.pila.append(a / b)
             else:
-                print("ERROR: División por cero")
+                self.output_func("ERROR: División por cero", end='')
                 self.pila.append(0)
         
         elif opcode == 'mod':  # Módulo
@@ -156,13 +154,14 @@ class InterpreteP:
         # Entrada/Salida
         elif opcode == 'rd':  # Leer
             try:
-                valor = float(input())
+                entrada = self.input_func()
+                valor = float(entrada)
                 # Si es entero, convertir a int
                 if valor == int(valor):
                     valor = int(valor)
                 self.pila.append(valor)
             except:
-                print("ERROR: Entrada inválida")
+                self.output_func("ERROR: Entrada inválida", end='')
                 self.pila.append(0)
         
         elif opcode == 'wr':  # Escribir
@@ -171,14 +170,21 @@ class InterpreteP:
                 # Procesar secuencias de escape
                 if isinstance(valor, str):
                     valor = valor.strip('"').replace('\\n', '\n').replace('\\t', '\t')
-                print(valor, end='')
+                # Convertir valores booleanos (0 y 1) a true/false
+                elif isinstance(valor, (int, float)) and valor in (0, 1):
+                    # Solo convertir si es exactamente 0 o 1 (no otros números)
+                    if valor == 1:
+                        valor = "true"
+                    elif valor == 0:
+                        valor = "false"
+                self.output_func(valor, end='')
         
         # Detener
         elif opcode == 'hlt':
             self.ejecutando = False
         
         else:
-            print(f"WARNING: Instrucción desconocida: {opcode}")
+            self.output_func(f"WARNING: Instrucción desconocida: {opcode}", end='')
     
     def parsear_valor(self, operando):
         """Convierte el operando string a su valor apropiado"""
@@ -197,9 +203,9 @@ class InterpreteP:
 
 
 # Función principal para ejecutar desde archivo
-def ejecutar_codigo_p(codigo_p_lines):
+def ejecutar_codigo_p(codigo_p_lines, input_func=None, output_func=None):
     """Ejecuta una lista de líneas de código P"""
-    interprete = InterpreteP()
+    interprete = InterpreteP(input_func=input_func, output_func=output_func)
     interprete.cargar_codigo(codigo_p_lines)
     interprete.ejecutar()
 

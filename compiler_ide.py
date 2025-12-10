@@ -1137,19 +1137,17 @@ class CompilerIDE:
             tokens, lex_errors = tokenize(code)
             
             actualizar_estado("Análisis Léxico", len(lex_errors) == 0)
-            text_result.insert(tk.END, "═" * 80 + "\n", "header")
-            text_result.insert(tk.END, "FASE 1: ANÁLISIS LÉXICO\n", "header")
-            text_result.insert(tk.END, "═" * 80 + "\n", "header")
+            text_result.insert(tk.END, "\nFASE 1: ANÁLISIS LÉXICO\n\n", "header")
             text_result.insert(tk.END, f"Tokens encontrados: {len(tokens)}\n", "info")
             text_result.insert(tk.END, f"Errores léxicos: {len(lex_errors)}\n\n", 
                              "error" if lex_errors else "success")
             
             if lex_errors:
                 for error in lex_errors[:5]:  # Mostrar solo los primeros 5
-                    text_result.insert(tk.END, f"  ❌ {error}\n", "error")
+                    text_result.insert(tk.END, f"  {error}\n", "error")
                 if len(lex_errors) > 5:
                     text_result.insert(tk.END, f"  ... y {len(lex_errors) - 5} errores más\n", "error")
-                text_result.insert(tk.END, "\n⚠️ Compilación detenida por errores léxicos.\n", "warning")
+                text_result.insert(tk.END, "\nCompilación detenida por errores léxicos.\n", "warning")
                 progress.stop()
                 return
             
@@ -1162,18 +1160,16 @@ class CompilerIDE:
             ast = parser.parse()
             
             actualizar_estado("Análisis Sintáctico", len(parser.errores) == 0)
-            text_result.insert(tk.END, "═" * 80 + "\n", "header")
-            text_result.insert(tk.END, "FASE 2: ANÁLISIS SINTÁCTICO\n", "header")
-            text_result.insert(tk.END, "═" * 80 + "\n", "header")
+            text_result.insert(tk.END, "\nFASE 2: ANÁLISIS SINTÁCTICO\n\n", "header")
             text_result.insert(tk.END, f"Errores sintácticos: {len(parser.errores)}\n\n", 
                              "error" if parser.errores else "success")
             
             if parser.errores:
                 for error in parser.errores[:5]:
-                    text_result.insert(tk.END, f"  ❌ {error}\n", "error")
+                    text_result.insert(tk.END, f"  {error}\n", "error")
                 if len(parser.errores) > 5:
                     text_result.insert(tk.END, f"  ... y {len(parser.errores) - 5} errores más\n", "error")
-                text_result.insert(tk.END, "\n⚠️ Compilación detenida por errores sintácticos.\n", "warning")
+                text_result.insert(tk.END, "\nCompilación detenida por errores sintácticos.\n", "warning")
                 progress.stop()
                 return
             
@@ -1191,9 +1187,7 @@ class CompilerIDE:
             tabla_simbolos, sem_errors, advertencias, codigo_intermedio, semantico_detalle, codigo_p = analizador.analizar()
             
             actualizar_estado("Análisis Semántico", len(sem_errors) == 0)
-            text_result.insert(tk.END, "═" * 80 + "\n", "header")
-            text_result.insert(tk.END, "FASE 3: ANÁLISIS SEMÁNTICO\n", "header")
-            text_result.insert(tk.END, "═" * 80 + "\n", "header")
+            text_result.insert(tk.END, "\nFASE 3: ANÁLISIS SEMÁNTICO\n\n", "header")
             text_result.insert(tk.END, f"Símbolos declarados: {len(tabla_simbolos.obtener_simbolos())}\n", "info")
             text_result.insert(tk.END, f"Errores semánticos: {len(sem_errors)}\n", 
                              "error" if sem_errors else "success")
@@ -1202,19 +1196,17 @@ class CompilerIDE:
             
             if sem_errors:
                 for error in sem_errors[:5]:
-                    text_result.insert(tk.END, f"  ❌ {error}\n", "error")
+                    text_result.insert(tk.END, f"  {error}\n", "error")
                 if len(sem_errors) > 5:
                     text_result.insert(tk.END, f"  ... y {len(sem_errors) - 5} errores más\n", "error")
-                text_result.insert(tk.END, "\n⚠️ Compilación completada con errores.\n", "warning")
+                text_result.insert(tk.END, "\nCompilación completada con errores.\n", "warning")
             else:
-                text_result.insert(tk.END, "═" * 80 + "\n", "header")
-                text_result.insert(tk.END, "✓ COMPILACIÓN EXITOSA\n", "success_big")
-                text_result.insert(tk.END, "═" * 80 + "\n", "header")
-                text_result.insert(tk.END, f"\n📝 Código intermedio generado: {len(codigo_intermedio)} instrucciones\n", "info")
-                text_result.insert(tk.END, f"📊 Variables en tabla de símbolos: {len(tabla_simbolos.obtener_simbolos())}\n", "info")
+                text_result.insert(tk.END, "\nCOMPILACIÓN EXITOSA\n\n", "success_big")
+                text_result.insert(tk.END, f"Código intermedio generado: {len(codigo_intermedio)} instrucciones\n", "info")
+                text_result.insert(tk.END, f"Variables en tabla de símbolos: {len(tabla_simbolos.obtener_simbolos())}\n", "info")
                 
                 if advertencias:
-                    text_result.insert(tk.END, f"\n⚠️ Se generaron {len(advertencias)} advertencias (ver pestaña de errores semánticos)\n", "warning")
+                    text_result.insert(tk.END, f"\nSe generaron {len(advertencias)} advertencias (ver pestaña de errores semánticos)\n", "warning")
             
             # Configurar estilos
             text_result.tag_configure("header", foreground="#2c3e50", font=("Consolas", 11, "bold"))
@@ -1240,7 +1232,7 @@ class CompilerIDE:
             progress.stop()
             status_label.config(text="Error en compilación")
             actualizar_estado("Compilación", False)
-            text_result.insert(tk.END, f"\n\n❌ Error crítico: {str(e)}\n", "error")
+            text_result.insert(tk.END, f"\n\nError crítico: {str(e)}\n", "error")
             text_result.tag_configure("error", foreground="#e74c3c", font=("Consolas", 10, "bold"))
             
             btn_close = tk.Button(frame, text="Cerrar", command=compile_window.destroy, 
@@ -1260,7 +1252,10 @@ class CompilerIDE:
                 messagebox.showerror("Error", "Hay errores léxicos. Corrígelos primero.")
                 return
             
-            analizador = AnalizadorSintactico(tokens)
+            # Convertir tuplas a objetos Token
+            token_objs = [Token(tipo, lexema, linea, columna) for (tipo, lexema, linea, columna) in tokens]
+            
+            analizador = AnalizadorSintactico(token_objs)
             ast = analizador.parse()
             
             if analizador.errores:
@@ -1322,86 +1317,84 @@ class CompilerIDE:
             console_frame = tk.Frame(main_frame, bg="#1e1e1e", relief=tk.SUNKEN, bd=2)
             console_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
             
-            console = scrolledtext.ScrolledText(console_frame, wrap=tk.WORD, 
-                                               bg="#1e1e1e", fg="#00ff00",
-                                               font=("Consolas", 10), 
-                                               insertbackground="#00ff00")
+            console = tk.Text(console_frame, wrap=tk.WORD, 
+                             bg="#1e1e1e", fg="#00ff00",
+                             font=("Consolas", 10), 
+                             insertbackground="#00ff00",
+                             state=tk.NORMAL)
             console.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
             
-            # Redirigir stdout a la consola
-            import sys
-            import io
+            # Variable de control para entrada
+            esperando_entrada = [False]
+            entrada_completada = [False]
+            valor_entrada = [""]
             
-            old_stdout = sys.stdout
-            old_stdin = sys.stdin
+            # Función de salida personalizada
+            def custom_output(*args, end='\n', **kwargs):
+                texto = ' '.join(str(arg) for arg in args) + end
+                console.insert(tk.END, texto)
+                console.see(tk.END)
+                console.update()
             
-            # Crear un buffer para la salida
-            output_buffer = io.StringIO()
-            sys.stdout = output_buffer
-            
-            # Variable para almacenar inputs
-            input_queue = []
-            input_index = [0]
-            
-            # Función para manejar input
-            def custom_input(prompt=""):
-                if prompt:
-                    console.insert(tk.END, prompt)
-                    console.see(tk.END)
+            # Función de entrada personalizada
+            def custom_input():
+                esperando_entrada[0] = True
+                entrada_completada[0] = False
+                valor_entrada[0] = ""
+                
+                # Marcar el inicio de la entrada
+                mark_inicio = console.index(tk.END + "-1c")
+                
+                # Habilitar edición temporalmente
+                console.config(state=tk.NORMAL)
+                console.focus()
+                
+                # Esperar a que el usuario presione Enter
+                def on_enter(event):
+                    if esperando_entrada[0]:
+                        # Obtener el texto desde el mark hasta el final
+                        entrada = console.get(mark_inicio, tk.END + "-1c")
+                        valor_entrada[0] = entrada.strip()
+                        entrada_completada[0] = True
+                        esperando_entrada[0] = False
+                        console.insert(tk.END, "\n")
+                        return "break"
+                
+                # Bind temporal para Enter
+                console.bind('<Return>', on_enter)
+                
+                # Esperar hasta que se complete la entrada
+                while not entrada_completada[0]:
                     console.update()
+                    exec_window.update()
                 
-                # Crear un diálogo para entrada
-                input_dialog = tk.Toplevel(exec_window)
-                input_dialog.title("Entrada requerida")
-                input_dialog.geometry("300x100")
-                input_dialog.transient(exec_window)
-                input_dialog.grab_set()
+                # Desactivar el bind
+                console.unbind('<Return>')
                 
-                tk.Label(input_dialog, text=prompt if prompt else "Ingrese un valor:").pack(pady=10)
-                
-                entry = tk.Entry(input_dialog, font=("Consolas", 10))
-                entry.pack(pady=5)
-                entry.focus()
-                
-                result = [""]
-                
-                def on_ok():
-                    result[0] = entry.get()
-                    input_dialog.destroy()
-                
-                entry.bind('<Return>', lambda e: on_ok())
-                tk.Button(input_dialog, text="OK", command=on_ok).pack(pady=5)
-                
-                input_dialog.wait_window()
-                
-                return result[0]
+                return valor_entrada[0]
             
-            # Reemplazar input
-            import builtins
-            old_input = builtins.input
-            builtins.input = custom_input
+            # Ejecutar el código en un hilo separado para no bloquear la UI
+            import threading
             
-            try:
-                # Ejecutar el código P
-                ejecutar_codigo_p(codigo_p)
+            def ejecutar_interprete():
+                try:
+                    # Ejecutar el código P con funciones personalizadas
+                    ejecutar_codigo_p(codigo_p, input_func=custom_input, output_func=custom_output)
+                    
+                    console.insert(tk.END, "\n\n✅ Ejecución completada exitosamente\n")
+                    console.config(state=tk.DISABLED)
+                    
+                except Exception as e:
+                    console.insert(tk.END, f"\n\n❌ Error en ejecución: {str(e)}\n")
+                    import traceback
+                    console.insert(tk.END, f"{traceback.format_exc()}\n")
+                    console.config(state=tk.DISABLED)
                 
-                # Obtener la salida
-                output = output_buffer.getvalue()
-                console.insert(tk.END, output)
-                console.insert(tk.END, "\n\n✅ Ejecución completada exitosamente")
-                
-            except Exception as e:
-                console.insert(tk.END, f"\n\n❌ Error en ejecución: {str(e)}")
-                import traceback
-                console.insert(tk.END, f"\n{traceback.format_exc()}")
+                self.status_label.config(text="Ejecución completada")
             
-            finally:
-                # Restaurar stdout y stdin
-                sys.stdout = old_stdout
-                sys.stdin = old_stdin
-                builtins.input = old_input
-            
-            console.config(state=tk.DISABLED)
+            # Iniciar ejecución en thread
+            thread = threading.Thread(target=ejecutar_interprete, daemon=True)
+            thread.start()
             
             # Botón para cerrar
             btn_close = tk.Button(main_frame, text="Cerrar", command=exec_window.destroy,
@@ -1409,7 +1402,7 @@ class CompilerIDE:
                                  padx=20, pady=8, font=("Arial", 10))
             btn_close.pack()
             
-            self.status_label.config(text="Ejecución completada")
+            self.status_label.config(text="Ejecutando...")
             
         except Exception as e:
             messagebox.showerror("Error", f"Error al ejecutar: {str(e)}")
