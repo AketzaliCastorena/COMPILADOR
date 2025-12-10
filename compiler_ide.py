@@ -3,6 +3,7 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk, font
 from analisis_lexico import tokenize 
 from analisis_sintactico import AnalizadorSintactico, ASTNode, Token
 from analisis_semantico import AnalizadorSemantico
+from interprete_p import ejecutar_codigo_p
 
 class CompilerIDE:
     def __init__(self, root):
@@ -107,6 +108,7 @@ class CompilerIDE:
         menu_compilador.menu.add_command(label="Léxico", command=self.lexical_analysis)
         menu_compilador.menu.add_command(label="Sintáctico", command=self.syntax_analysis)
         menu_compilador.menu.add_command(label="Semántico", command=self.semantic_analysis)
+        menu_compilador.menu.add_command(label="Recargar Generador P", command=self.reload_semantic_module)
         menu_compilador.menu.add_separator()
         menu_compilador.menu.add_command(label="Compilar", command=self.execute_code)
 
@@ -140,7 +142,8 @@ class CompilerIDE:
             {"text": "📑", "command": self.lexical_analysis, "tooltip": "Análisis Léxico", "color": "#3498db"},
             {"text": "📜", "command": self.syntax_analysis, "tooltip": "Análisis Sintáctico", "color": "#2ecc71"},
             {"text": "🔍", "command": self.semantic_analysis, "tooltip": "Análisis Semántico", "color": "#e74c3c"},
-            {"text": "🚀", "command": self.execute_code, "tooltip": "Compilar", "color": "#f39c12"}
+            {"text": "🚀", "command": self.execute_code, "tooltip": "Compilar", "color": "#f39c12"},
+            {"text": "▶️", "command": self.run_codigo_p, "tooltip": "Ejecutar Código P", "color": "#9b59b6"}
         ]
         
         btn_style_compiler = btn_style.copy()  # Crear una copia del diccionario 
@@ -151,6 +154,10 @@ class CompilerIDE:
             button.pack(side=tk.LEFT, padx=5)
             self.create_tooltip(button, btn["tooltip"])
             button.config(command=btn["command"])
+        # Botón para recargar el módulo del generador sin reiniciar la aplicación
+        btn_reload = tk.Button(toolbar, text="🔁", bg=self.colors["bg_toolbar"], fg=self.colors["fg_toolbar"],
+                               font=('Arial', 14), relief=tk.FLAT, bd=0, padx=8, pady=3, command=self.reload_semantic_module)
+        btn_reload.pack(side=tk.LEFT, padx=5)
         
         # Indicador de archivo actual
         self.file_indicator = tk.Label(toolbar, text="Sin archivo", bg=self.colors["bg_toolbar"], 
@@ -347,7 +354,7 @@ class CompilerIDE:
 
     def save_file(self):
         if self.filename:
-            with open(self.filename, "w") as file:
+            with open(self.filename, "w", encoding="utf-8") as file:
                 file.write(self.text_area.get(1.0, tk.END))
             self.status_label.config(text=f"Archivo guardado: {self.filename}")
             self.text_area.edit_modified(False)
@@ -428,6 +435,17 @@ class CompilerIDE:
             self.status_label.config(text=f"Error en análisis léxico: {str(e)}")
             error_text = self.lexical_errors.winfo_children()[0]
             error_text.insert(tk.END, f"Error al realizar análisis léxico: {str(e)}\n", "error")
+
+    def reload_semantic_module(self):
+        """Recarga analisis_semantico para reflejar cambios en caliente."""
+        try:
+            import importlib, analisis_semantico as _sem_mod
+            importlib.reload(_sem_mod)
+            messagebox.showinfo("Recarga", "Módulo 'analisis_semantico' recargado correctamente.")
+            self.status_label.config(text="Módulo 'analisis_semantico' recargado")
+        except Exception as e:
+            messagebox.showerror("Recarga", f"Error recargando el módulo: {e}")
+            self.status_label.config(text="Error recargando 'analisis_semantico'")
 
 
     def get_token_color(self, token_type):
@@ -688,12 +706,29 @@ class CompilerIDE:
                 )
             
             # Ejecutar análisis semántico
-            analizador = AnalizadorSemantico(ast)
-            tabla_simbolos, errores, advertencias, codigo_intermedio, semantico_detalle = analizador.analizar()
+            # FORZAR recarga automática del módulo para reflejar cambios inmediatamente
+            import importlib
+            import analisis_semantico as _sem_mod
+            importlib.reload(_sem_mod)
+            AnalizadorSemanticoLocal = _sem_mod.AnalizadorSemantico
+            
+            analizador = AnalizadorSemanticoLocal(ast)
+            tabla_simbolos, errores, advertencias, codigo_intermedio, semantico_detalle, codigo_p = analizador.analizar()
             
             # Eliminar el widget anterior en la pestaña semántica
             for widget in self.semantic_tab.winfo_children():
                 widget.destroy()
+
+            # DEBUG: imprimir en consola el código intermedio y Código P que devuelve el analizador
+            try:
+                print("--- DEBUG: código_intermedio (desde IDE) ---")
+                for i, ins in enumerate(codigo_intermedio, 1):
+                    print(f"{i:3d}: {ins}")
+                print("--- DEBUG: codigo_p (desde IDE) ---")
+                for i, ins in enumerate(codigo_p, 1):
+                    print(f"{i:3d}: {ins}")
+            except Exception as _:
+                pass
             
             # Crear frame principal para el árbol semántico
             main_frame = tk.Frame(self.semantic_tab)
@@ -906,24 +941,106 @@ class CompilerIDE:
             text_tabla.tag_configure("separator", foreground="#95a5a6")
             text_tabla.tag_configure("info", foreground="#27ae60", font=("Consolas", 10, "bold"))
             
-            # Mostrar código intermedio
+            # Mostrar Código P con descripciones
             text_codigo = self.intermediate_code_tab.winfo_children()[0]
-            text_codigo.insert(tk.END, "=" * 80 + "\n", "header")
-            text_codigo.insert(tk.END, "CÓDIGO INTERMEDIO (Tres Direcciones)\n", "header")
-            text_codigo.insert(tk.END, "=" * 80 + "\n\n", "header")
-            
-            if codigo_intermedio:
-                for i, instruccion in enumerate(codigo_intermedio, 1):
-                    text_codigo.insert(tk.END, f"{i:3d}:  {instruccion}\n")
+
+            if codigo_p:
+                # Obtener mapeo de direcciones a nombres de variables
+                mapeo_dir_var = {}
+                if hasattr(analizador.generador, 'variables'):
+                    # Invertir el diccionario: de {var: dir} a {dir: var}
+                    mapeo_dir_var = {str(dir): var for var, dir in analizador.generador.variables.items()}
+                
+                # Diccionario de descripciones para cada nemónico
+                descripciones = {
+                    'ldc': 'carga constante entero',
+                    'lod': 'carga variable desde dirección',
+                    'sto': 'almacena resultado en variable',
+                    'adi': 'suma (addition)',
+                    'sbi': 'resta (subtraction)',
+                    'mpi': 'multiplicación',
+                    'dvi': 'división',
+                    'mod': 'módulo (residuo) de dos valores en pila',
+                    'leq': 'comparación menor o igual que',
+                    'geq': 'comparación mayor o igual que',
+                    'les': 'comparación menor que',
+                    'grt': 'comparación mayor que',
+                    'equ': 'comparación igualdad',
+                    'neq': 'comparación diferente',
+                    'and': 'operación lógica AND',
+                    'or': 'operación lógica OR',
+                    'lab': 'etiqueta (marca posición)',
+                    'fjp': 'si condición es falsa, salta a etiqueta',
+                    'ujp': 'salto incondicional a etiqueta',
+                    'rd': 'leer entrada del usuario',
+                    'wr': 'escribir salida',
+                    'hlt': 'detener programa'
+                }
+                
+                # Función para obtener descripción de una instrucción
+                def obtener_descripcion(instruccion):
+                    inst = instruccion.strip()
+                    if inst.startswith(';'):
+                        return ''
+                    
+                    partes = inst.split()
+                    if not partes:
+                        return ''
+                    
+                    nemonico = partes[0].lower()
+                    
+                    # Casos especiales
+                    if nemonico == 'lab':
+                        if len(partes) > 1:
+                            return f'etiqueta entrada del ciclo/bloque {partes[1]}'
+                    elif nemonico == 'fjp':
+                        if len(partes) > 1:
+                            return f'si condición es falsa, salta al fin {partes[1]}'
+                    elif nemonico == 'ujp':
+                        if len(partes) > 1:
+                            return f'salto incondicional a {partes[1]}'
+                    elif nemonico == 'ldc':
+                        if len(partes) > 1:
+                            valor = ' '.join(partes[1:])
+                            if valor.startswith('"'):
+                                return f'carga cadena literal {valor}'
+                            else:
+                                return f'carga constante entero {valor}'
+                    elif nemonico == 'lod':
+                        if len(partes) > 1:
+                            dir_num = partes[1]
+                            nombre_var = mapeo_dir_var.get(dir_num, f'dirección {dir_num}')
+                            return f"carga variable '{nombre_var}' desde dirección {dir_num}"
+                    elif nemonico == 'sto':
+                        if len(partes) > 1:
+                            dir_num = partes[1]
+                            nombre_var = mapeo_dir_var.get(dir_num, f'dirección {dir_num}')
+                            return f"almacena resultado en variable '{nombre_var}' (dirección {dir_num})"
+                    
+                    return descripciones.get(nemonico, '')
+                
+                # Crear encabezado de tabla
+                text_codigo.insert(tk.END, f"{'Dir':<6} {'Instrucción':<20} {'Descripción'}\n", "header")
+                text_codigo.insert(tk.END, "=" * 80 + "\n", "separator")
+                
+                # Mostrar instrucciones con descripciones
+                for i, instruccion in enumerate(codigo_p):
+                    # Saltar comentarios de debug
+                    if instruccion.strip().startswith('; Generador'):
+                        continue
+                    
+                    descripcion = obtener_descripcion(instruccion)
+                    text_codigo.insert(tk.END, f"{i:<6} {instruccion:<20} {descripcion}\n", "codigo_p")
                 text_codigo.insert(tk.END, "\n" + "=" * 80 + "\n", "separator")
-                text_codigo.insert(tk.END, f"Total de instrucciones: {len(codigo_intermedio)}\n", "info")
+                text_codigo.insert(tk.END, f"Total de instrucciones P: {len(codigo_p)}\n", "info")
             else:
-                text_codigo.insert(tk.END, "No se generó código intermedio.\n", "info")
-            
+                text_codigo.insert(tk.END, "No se generó código P.\n", "info")
+
             # Configurar estilos
             text_codigo.tag_configure("header", foreground="#2c3e50", font=("Consolas", 11, "bold"))
             text_codigo.tag_configure("separator", foreground="#95a5a6")
             text_codigo.tag_configure("info", foreground="#27ae60", font=("Consolas", 10, "bold"))
+            text_codigo.tag_configure("codigo_p", foreground="#8e44ad", font=("Consolas", 10))
             
             # Mostrar errores semánticos
             text_errores = self.semantic_errors.winfo_children()[0]
@@ -1020,19 +1137,17 @@ class CompilerIDE:
             tokens, lex_errors = tokenize(code)
             
             actualizar_estado("Análisis Léxico", len(lex_errors) == 0)
-            text_result.insert(tk.END, "═" * 80 + "\n", "header")
-            text_result.insert(tk.END, "FASE 1: ANÁLISIS LÉXICO\n", "header")
-            text_result.insert(tk.END, "═" * 80 + "\n", "header")
+            text_result.insert(tk.END, "\nFASE 1: ANÁLISIS LÉXICO\n\n", "header")
             text_result.insert(tk.END, f"Tokens encontrados: {len(tokens)}\n", "info")
             text_result.insert(tk.END, f"Errores léxicos: {len(lex_errors)}\n\n", 
                              "error" if lex_errors else "success")
             
             if lex_errors:
                 for error in lex_errors[:5]:  # Mostrar solo los primeros 5
-                    text_result.insert(tk.END, f"  ❌ {error}\n", "error")
+                    text_result.insert(tk.END, f"  {error}\n", "error")
                 if len(lex_errors) > 5:
                     text_result.insert(tk.END, f"  ... y {len(lex_errors) - 5} errores más\n", "error")
-                text_result.insert(tk.END, "\n⚠️ Compilación detenida por errores léxicos.\n", "warning")
+                text_result.insert(tk.END, "\nCompilación detenida por errores léxicos.\n", "warning")
                 progress.stop()
                 return
             
@@ -1045,18 +1160,16 @@ class CompilerIDE:
             ast = parser.parse()
             
             actualizar_estado("Análisis Sintáctico", len(parser.errores) == 0)
-            text_result.insert(tk.END, "═" * 80 + "\n", "header")
-            text_result.insert(tk.END, "FASE 2: ANÁLISIS SINTÁCTICO\n", "header")
-            text_result.insert(tk.END, "═" * 80 + "\n", "header")
+            text_result.insert(tk.END, "\nFASE 2: ANÁLISIS SINTÁCTICO\n\n", "header")
             text_result.insert(tk.END, f"Errores sintácticos: {len(parser.errores)}\n\n", 
                              "error" if parser.errores else "success")
             
             if parser.errores:
                 for error in parser.errores[:5]:
-                    text_result.insert(tk.END, f"  ❌ {error}\n", "error")
+                    text_result.insert(tk.END, f"  {error}\n", "error")
                 if len(parser.errores) > 5:
                     text_result.insert(tk.END, f"  ... y {len(parser.errores) - 5} errores más\n", "error")
-                text_result.insert(tk.END, "\n⚠️ Compilación detenida por errores sintácticos.\n", "warning")
+                text_result.insert(tk.END, "\nCompilación detenida por errores sintácticos.\n", "warning")
                 progress.stop()
                 return
             
@@ -1064,13 +1177,17 @@ class CompilerIDE:
             status_label.config(text="Fase 3: Análisis Semántico...")
             compile_window.update()
             
-            analizador = AnalizadorSemantico(ast)
-            tabla_simbolos, sem_errors, advertencias, codigo_intermedio = analizador.analizar()
+            # FORZAR recarga automática del módulo para reflejar cambios inmediatamente
+            import importlib
+            import analisis_semantico as _sem_mod
+            importlib.reload(_sem_mod)
+            AnalizadorSemanticoLocal = _sem_mod.AnalizadorSemantico
+            
+            analizador = AnalizadorSemanticoLocal(ast)
+            tabla_simbolos, sem_errors, advertencias, codigo_intermedio, semantico_detalle, codigo_p = analizador.analizar()
             
             actualizar_estado("Análisis Semántico", len(sem_errors) == 0)
-            text_result.insert(tk.END, "═" * 80 + "\n", "header")
-            text_result.insert(tk.END, "FASE 3: ANÁLISIS SEMÁNTICO\n", "header")
-            text_result.insert(tk.END, "═" * 80 + "\n", "header")
+            text_result.insert(tk.END, "\nFASE 3: ANÁLISIS SEMÁNTICO\n\n", "header")
             text_result.insert(tk.END, f"Símbolos declarados: {len(tabla_simbolos.obtener_simbolos())}\n", "info")
             text_result.insert(tk.END, f"Errores semánticos: {len(sem_errors)}\n", 
                              "error" if sem_errors else "success")
@@ -1079,19 +1196,17 @@ class CompilerIDE:
             
             if sem_errors:
                 for error in sem_errors[:5]:
-                    text_result.insert(tk.END, f"  ❌ {error}\n", "error")
+                    text_result.insert(tk.END, f"  {error}\n", "error")
                 if len(sem_errors) > 5:
                     text_result.insert(tk.END, f"  ... y {len(sem_errors) - 5} errores más\n", "error")
-                text_result.insert(tk.END, "\n⚠️ Compilación completada con errores.\n", "warning")
+                text_result.insert(tk.END, "\nCompilación completada con errores.\n", "warning")
             else:
-                text_result.insert(tk.END, "═" * 80 + "\n", "header")
-                text_result.insert(tk.END, "✓ COMPILACIÓN EXITOSA\n", "success_big")
-                text_result.insert(tk.END, "═" * 80 + "\n", "header")
-                text_result.insert(tk.END, f"\n📝 Código intermedio generado: {len(codigo_intermedio)} instrucciones\n", "info")
-                text_result.insert(tk.END, f"📊 Variables en tabla de símbolos: {len(tabla_simbolos.obtener_simbolos())}\n", "info")
+                text_result.insert(tk.END, "\nCOMPILACIÓN EXITOSA\n\n", "success_big")
+                text_result.insert(tk.END, f"Código intermedio generado: {len(codigo_intermedio)} instrucciones\n", "info")
+                text_result.insert(tk.END, f"Variables en tabla de símbolos: {len(tabla_simbolos.obtener_simbolos())}\n", "info")
                 
                 if advertencias:
-                    text_result.insert(tk.END, f"\n⚠️ Se generaron {len(advertencias)} advertencias (ver pestaña de errores semánticos)\n", "warning")
+                    text_result.insert(tk.END, f"\nSe generaron {len(advertencias)} advertencias (ver pestaña de errores semánticos)\n", "warning")
             
             # Configurar estilos
             text_result.tag_configure("header", foreground="#2c3e50", font=("Consolas", 11, "bold"))
@@ -1117,12 +1232,181 @@ class CompilerIDE:
             progress.stop()
             status_label.config(text="Error en compilación")
             actualizar_estado("Compilación", False)
-            text_result.insert(tk.END, f"\n\n❌ Error crítico: {str(e)}\n", "error")
+            text_result.insert(tk.END, f"\n\nError crítico: {str(e)}\n", "error")
             text_result.tag_configure("error", foreground="#e74c3c", font=("Consolas", 10, "bold"))
             
             btn_close = tk.Button(frame, text="Cerrar", command=compile_window.destroy, 
                     bg="#e74c3c", fg="white", relief=tk.FLAT, padx=15, pady=5)
             btn_close.pack(pady=(10, 0))
+
+    def run_codigo_p(self):
+        """Ejecuta el código P generado usando el intérprete"""
+        self.status_label.config(text="Ejecutando código P...")
+        
+        # Primero hacer análisis semántico para generar código P
+        try:
+            code = self.text_area.get("1.0", tk.END)
+            tokens, lex_errors = tokenize(code)
+            
+            if lex_errors:
+                messagebox.showerror("Error", "Hay errores léxicos. Corrígelos primero.")
+                return
+            
+            # Convertir tuplas a objetos Token
+            token_objs = [Token(tipo, lexema, linea, columna) for (tipo, lexema, linea, columna) in tokens]
+            
+            analizador = AnalizadorSintactico(token_objs)
+            ast = analizador.parse()
+            
+            if analizador.errores:
+                messagebox.showerror("Error", "Hay errores sintácticos. Corrígelos primero.")
+                return
+            
+            import importlib
+            import analisis_semantico
+            importlib.reload(analisis_semantico)
+            from analisis_semantico import AnalizadorSemantico
+            
+            analizador_sem = AnalizadorSemantico(ast)
+            
+            try:
+                resultado = analizador_sem.analizar()
+                
+                # Desempaquetar resultado
+                if isinstance(resultado, tuple) and len(resultado) == 6:
+                    tabla, errores, advertencias, codigo_intermedio, semantico_detalle, codigo_p = resultado
+                else:
+                    messagebox.showerror("Error", f"Resultado del análisis semántico inválido: {type(resultado)}")
+                    return
+                
+                if errores:
+                    msg = "Errores semánticos:\n" + "\n".join(errores[:5])
+                    messagebox.showerror("Error", msg)
+                    return
+                
+                if not codigo_p or not isinstance(codigo_p, list):
+                    messagebox.showerror("Error", f"Código P inválido: tipo={type(codigo_p)}, len={len(codigo_p) if codigo_p else 0}")
+                    return
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Error en análisis semántico: {str(e)}\n{type(e).__name__}")
+                import traceback
+                print(traceback.format_exc())
+                return
+            
+            # Crear ventana de ejecución
+            exec_window = tk.Toplevel(self.root)
+            exec_window.title("Ejecutando Código P")
+            exec_window.geometry("600x500")
+            
+            # Centrar la ventana
+            x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (300)
+            y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (250)
+            exec_window.geometry(f"+{x}+{y}")
+            
+            # Frame principal
+            main_frame = tk.Frame(exec_window, bg="white", padx=10, pady=10)
+            main_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Título
+            title = tk.Label(main_frame, text="🖥️ Consola de Ejecución", 
+                           font=("Arial", 14, "bold"), bg="white")
+            title.pack(pady=(0, 10))
+            
+            # Área de texto para la consola
+            console_frame = tk.Frame(main_frame, bg="#1e1e1e", relief=tk.SUNKEN, bd=2)
+            console_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+            
+            console = tk.Text(console_frame, wrap=tk.WORD, 
+                             bg="#1e1e1e", fg="#00ff00",
+                             font=("Consolas", 10), 
+                             insertbackground="#00ff00",
+                             state=tk.NORMAL)
+            console.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+            
+            # Variable de control para entrada
+            esperando_entrada = [False]
+            entrada_completada = [False]
+            valor_entrada = [""]
+            
+            # Función de salida personalizada
+            def custom_output(*args, end='\n', **kwargs):
+                texto = ' '.join(str(arg) for arg in args) + end
+                console.insert(tk.END, texto)
+                console.see(tk.END)
+                console.update()
+            
+            # Función de entrada personalizada
+            def custom_input():
+                esperando_entrada[0] = True
+                entrada_completada[0] = False
+                valor_entrada[0] = ""
+                
+                # Marcar el inicio de la entrada
+                mark_inicio = console.index(tk.END + "-1c")
+                
+                # Habilitar edición temporalmente
+                console.config(state=tk.NORMAL)
+                console.focus()
+                
+                # Esperar a que el usuario presione Enter
+                def on_enter(event):
+                    if esperando_entrada[0]:
+                        # Obtener el texto desde el mark hasta el final
+                        entrada = console.get(mark_inicio, tk.END + "-1c")
+                        valor_entrada[0] = entrada.strip()
+                        entrada_completada[0] = True
+                        esperando_entrada[0] = False
+                        console.insert(tk.END, "\n")
+                        return "break"
+                
+                # Bind temporal para Enter
+                console.bind('<Return>', on_enter)
+                
+                # Esperar hasta que se complete la entrada
+                while not entrada_completada[0]:
+                    console.update()
+                    exec_window.update()
+                
+                # Desactivar el bind
+                console.unbind('<Return>')
+                
+                return valor_entrada[0]
+            
+            # Ejecutar el código en un hilo separado para no bloquear la UI
+            import threading
+            
+            def ejecutar_interprete():
+                try:
+                    # Ejecutar el código P con funciones personalizadas
+                    ejecutar_codigo_p(codigo_p, input_func=custom_input, output_func=custom_output)
+                    
+                    console.insert(tk.END, "\n\n✅ Ejecución completada exitosamente\n")
+                    console.config(state=tk.DISABLED)
+                    
+                except Exception as e:
+                    console.insert(tk.END, f"\n\n❌ Error en ejecución: {str(e)}\n")
+                    import traceback
+                    console.insert(tk.END, f"{traceback.format_exc()}\n")
+                    console.config(state=tk.DISABLED)
+                
+                self.status_label.config(text="Ejecución completada")
+            
+            # Iniciar ejecución en thread
+            thread = threading.Thread(target=ejecutar_interprete, daemon=True)
+            thread.start()
+            
+            # Botón para cerrar
+            btn_close = tk.Button(main_frame, text="Cerrar", command=exec_window.destroy,
+                                 bg=self.colors["accent"], fg="white", relief=tk.FLAT,
+                                 padx=20, pady=8, font=("Arial", 10))
+            btn_close.pack()
+            
+            self.status_label.config(text="Ejecutando...")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al ejecutar: {str(e)}")
+            self.status_label.config(text="Error en ejecución")
 
     def update_line_col(self, event=None):
         cursor_index = self.text_area.index(tk.INSERT)

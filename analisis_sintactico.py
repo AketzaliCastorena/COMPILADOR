@@ -137,6 +137,9 @@ class AnalizadorSintactico:
         if actual is None:
             return None
 
+        # DEBUG: ver qué tipo de token estamos procesando
+        # print(f"DEBUG parse_sentencia: actual.lexema='{actual.lexema}', actual.tipo='{actual.tipo}'")
+
         try:
             if actual.tipo == "IDENTIFICADOR":
                 # Verifica si es un operador unario como sentencia
@@ -152,7 +155,7 @@ class AnalizadorSintactico:
                 return self.parse_sent_out()
             elif actual.lexema == "cin":
                 return self.parse_sent_in()
-            elif actual.lexema == "if":
+            elif actual.lexema == "if" or actual.tipo == "RESERVADA" and actual.lexema == "if":
                 return self.parse_seleccion()
             elif actual.lexema == "do":
                 return self.parse_do_while()
@@ -214,14 +217,39 @@ class AnalizadorSintactico:
         return nodo
 
     def parse_expresion(self):
+        """Parsea expresión lógica (AND, OR tienen menor precedencia)"""
+        nodo = self.parse_expresion_relacional()
+        if not nodo:
+            return None
+
+        while True:
+            token = self.obtener_token()
+            # Solo operadores lógicos aquí (&&, ||)
+            if token and token.tipo == "OPERADOR_LOG":
+                operador = self.coincidir("OPERADOR_LOG")
+                derecho = self.parse_expresion_relacional()
+                if not derecho:
+                    self.errores.append(f"Error: Falta expresión después de operador '{operador.lexema}'")
+                    break
+                nuevo = ASTNode("op", operador.lexema)
+                nuevo.agregar_hijo(nodo)
+                nuevo.agregar_hijo(derecho)
+                nodo = nuevo
+            else:
+                break
+        return nodo
+
+    def parse_expresion_relacional(self):
+        """Parsea expresión relacional (<, >, <=, >=, ==, !=)"""
         nodo = self.parse_expresion_simple()
         if not nodo:
             return None
 
         while True:
             token = self.obtener_token()
-            if token and token.tipo in ["OPERADOR_REL", "OPERADOR_LOG"]:
-                operador = self.coincidir(token.tipo)
+            # Solo operadores relacionales aquí (<, >, <=, >=, ==, !=)
+            if token and token.tipo == "OPERADOR_REL":
+                operador = self.coincidir("OPERADOR_REL")
                 derecho = self.parse_expresion_simple()
                 if not derecho:
                     self.errores.append(f"Error: Falta expresión después de operador '{operador.lexema}'")
@@ -521,6 +549,18 @@ class AnalizadorSintactico:
         token = self.obtener_token()
         if not token:
             return None
+
+        # Manejar signo negativo unario
+        if token.tipo == "OPERADOR_ARIT" and token.lexema == "-":
+            self.index += 1
+            operando = self.parse_componente()
+            if not operando:
+                self.errores.append("Error: Falta operando después de '-' unario")
+                return None
+            # Crear nodo para negación unaria
+            nodo = ASTNode("unario_op", "-", token.linea, token.columna)
+            nodo.agregar_hijo(operando)
+            return nodo
 
         if token.lexema == "(":
             self.coincidir("SIMBOLO", "(")
