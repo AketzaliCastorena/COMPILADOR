@@ -400,6 +400,15 @@ class AnalizadorSemantico:
         """Recorre el AST y recolecta información semántica por nodo"""
         if nodo is None:
             return
+        
+        # Si es una tupla (resultado de visitar_expresion), ignorarla
+        if isinstance(nodo, tuple):
+            return
+        
+        # Verificar que tiene atributos necesarios
+        if not hasattr(nodo, 'tipo'):
+            return
+            
         # Determinar tipo semántico y valor
         tipo_sem = getattr(nodo, 'tipo_semantico', None)
         valor = getattr(nodo, 'valor_semantico', None)
@@ -441,6 +450,14 @@ class AnalizadorSemantico:
         if nodo is None:
             return None
         
+        # Si es una tupla (resultado de visitar_expresion), no procesarla
+        if isinstance(nodo, tuple):
+            return None
+        
+        # Verificar que tenga atributo tipo
+        if not hasattr(nodo, 'tipo'):
+            return None
+        
         metodo_nombre = f"visitar_{nodo.tipo}"
         metodo = getattr(self, metodo_nombre, self.visitar_generico)
         return metodo(nodo)
@@ -448,32 +465,37 @@ class AnalizadorSemantico:
     def visitar_generico(self, nodo):
         """Visita genérica para nodos sin método específico"""
         for hijo in nodo.hijos:
-            self.visitar(hijo)
+            if not isinstance(hijo, tuple) and hasattr(hijo, 'tipo'):
+                self.visitar(hijo)
         return None
     
     def visitar_programa(self, nodo):
         """Visita el nodo programa"""
         self.generador.agregar("# Inicio del programa")
         for hijo in nodo.hijos:
-            self.visitar(hijo)
+            if not isinstance(hijo, tuple) and hasattr(hijo, 'tipo'):
+                self.visitar(hijo)
         self.generador.agregar("# Fin del programa")
         return None
     
     def visitar_lista_declaracion(self, nodo):
         """Visita lista de declaraciones"""
         for hijo in nodo.hijos:
-            self.visitar(hijo)
+            if not isinstance(hijo, tuple) and hasattr(hijo, 'tipo'):
+                self.visitar(hijo)
         return None
     
     def visitar_declaracion_variable(self, nodo):
         """Visita declaración de variable"""
         # Primer hijo es el tipo
-        if nodo.hijos and nodo.hijos[0].tipo == "tipo":
+        if nodo.hijos and not isinstance(nodo.hijos[0], tuple) and hasattr(nodo.hijos[0], 'tipo') and nodo.hijos[0].tipo == "tipo":
             self.tipo_actual = nodo.hijos[0].valor
             
             # Segundo hijo es la lista de identificadores
-            if len(nodo.hijos) > 1 and nodo.hijos[1].tipo == "identificadores":
+            if len(nodo.hijos) > 1 and not isinstance(nodo.hijos[1], tuple) and hasattr(nodo.hijos[1], 'tipo') and nodo.hijos[1].tipo == "identificadores":
                 for id_nodo in nodo.hijos[1].hijos:
+                    if isinstance(id_nodo, tuple) or not hasattr(id_nodo, 'tipo'):
+                        continue
                     if id_nodo.tipo == "id":
                         exito, error = self.tabla_simbolos.insertar(
                             id_nodo.valor,
@@ -749,10 +771,34 @@ class AnalizadorSemantico:
         return None
     
     def visitar_operacion_unaria(self, nodo):
-        """Visita operación unaria (++, --)"""
+        """Visita operación unaria (++, --, -)"""
         if len(nodo.hijos) < 1:
             return None, None
         
+        # Manejar operador unario negativo (-)
+        if nodo.valor == "-":
+            tipo_operando, temp_operando = self.visitar_expresion(nodo.hijos[0])
+            
+            if tipo_operando not in ["int", "float"]:
+                self.errores.append(
+                    f"Error semántico: Operador unario '-' requiere tipo numérico, se recibió '{tipo_operando}'"
+                )
+                return None, None
+            
+            # Si el operando es un número literal, retornar el valor negado directamente
+            if isinstance(temp_operando, (int, float)):
+                valor_negado = -temp_operando
+                nodo.valor_calculado = valor_negado
+                nodo.tipo_semantico = tipo_operando
+                return tipo_operando, valor_negado
+            
+            # Si es una variable, generar código intermedio
+            temp = self.generador.nuevo_temporal()
+            self.generador.agregar(f"{temp} = 0 - {temp_operando}")
+            nodo.tipo_semantico = tipo_operando
+            return tipo_operando, temp
+        
+        # El resto del código es para ++ y --
         # El primer hijo debe ser un identificador
         id_nodo = nodo.hijos[0]
         if id_nodo.tipo != "id":
@@ -820,13 +866,8 @@ class AnalizadorSemantico:
     
     def visitar_seleccion(self, nodo):
         """Visita estructura if-else"""
-        # DEBUG: ver estructura del nodo if
-        print(f"DEBUG visitar_seleccion: nodo tiene {len(nodo.hijos)} hijos")
-        for i, hijo in enumerate(nodo.hijos):
-            print(f"  Hijo {i}: tipo={hijo.tipo}, valor={hijo.valor if hasattr(hijo, 'valor') else 'N/A'}")
-        
         # El primer hijo después de la palabra reservada es la condición
-        condicion_idx = 1 if nodo.hijos and nodo.hijos[0].tipo == "RESERVADA" else 0
+        condicion_idx = 1 if nodo.hijos and not isinstance(nodo.hijos[0], tuple) and hasattr(nodo.hijos[0], 'tipo') and nodo.hijos[0].tipo == "RESERVADA" else 0
         
         if len(nodo.hijos) > condicion_idx:
             tipo_cond, temp_cond = self.visitar_expresion(nodo.hijos[condicion_idx])
@@ -840,7 +881,7 @@ class AnalizadorSemantico:
             tiene_else = False
             if len(nodo.hijos) > condicion_idx + 2:
                 else_idx = condicion_idx + 2
-                if nodo.hijos[else_idx].tipo == "RESERVADA":
+                if not isinstance(nodo.hijos[else_idx], tuple) and hasattr(nodo.hijos[else_idx], 'tipo') and nodo.hijos[else_idx].tipo == "RESERVADA":
                     else_idx += 1
                 if len(nodo.hijos) > else_idx:
                     tiene_else = True
@@ -862,7 +903,7 @@ class AnalizadorSemantico:
                 
                 # Bloque else
                 else_idx = condicion_idx + 2
-                if nodo.hijos[else_idx].tipo == "RESERVADA":
+                if not isinstance(nodo.hijos[else_idx], tuple) and hasattr(nodo.hijos[else_idx], 'tipo') and nodo.hijos[else_idx].tipo == "RESERVADA":
                     else_idx += 1
                 self.visitar(nodo.hijos[else_idx])
                 
@@ -935,7 +976,7 @@ class AnalizadorSemantico:
         """Visita sentencia cin (entrada)"""
         # Buscar el identificador
         for hijo in nodo.hijos:
-            if hijo.tipo == "id":
+            if not isinstance(hijo, tuple) and hasattr(hijo, 'tipo') and hijo.tipo == "id":
                 simbolo = self.tabla_simbolos.buscar(hijo.valor)
                 if simbolo is None:
                     self.errores.append(
@@ -951,13 +992,12 @@ class AnalizadorSemantico:
     
     def visitar_sent_out(self, nodo):
         """Visita sentencia cout (salida)"""
-        # DEBUG: imprimir estructura del nodo para depuración
-        print(f"DEBUG sent_out: nodo tiene {len(nodo.hijos)} hijos")
-        for i, hijo in enumerate(nodo.hijos):
-            print(f"  Hijo {i}: tipo={hijo.tipo}, valor={hijo.valor if hasattr(hijo, 'valor') else 'N/A'}")
-        
         # Visitar todos los identificadores o valores a imprimir
         for hijo in nodo.hijos:
+            # Verificar que hijo no es una tupla y tiene atributo tipo
+            if isinstance(hijo, tuple) or not hasattr(hijo, 'tipo'):
+                continue
+                
             if hijo.tipo == "RESERVADA" and hijo.valor in ["cout", "<<"]:
                 # Ignorar palabras reservadas cout y <<
                 continue
@@ -991,7 +1031,8 @@ class AnalizadorSemantico:
     def visitar_bloque(self, nodo):
         """Visita un bloque de sentencias"""
         for hijo in nodo.hijos:
-            self.visitar(hijo)
+            if not isinstance(hijo, tuple) and hasattr(hijo, 'tipo'):
+                self.visitar(hijo)
         return None
     
     def evaluar_valor_simple(self, nodo):

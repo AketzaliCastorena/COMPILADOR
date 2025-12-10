@@ -3,6 +3,7 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk, font
 from analisis_lexico import tokenize 
 from analisis_sintactico import AnalizadorSintactico, ASTNode, Token
 from analisis_semantico import AnalizadorSemantico
+from interprete_p import ejecutar_codigo_p
 
 class CompilerIDE:
     def __init__(self, root):
@@ -141,7 +142,8 @@ class CompilerIDE:
             {"text": "📑", "command": self.lexical_analysis, "tooltip": "Análisis Léxico", "color": "#3498db"},
             {"text": "📜", "command": self.syntax_analysis, "tooltip": "Análisis Sintáctico", "color": "#2ecc71"},
             {"text": "🔍", "command": self.semantic_analysis, "tooltip": "Análisis Semántico", "color": "#e74c3c"},
-            {"text": "🚀", "command": self.execute_code, "tooltip": "Compilar", "color": "#f39c12"}
+            {"text": "🚀", "command": self.execute_code, "tooltip": "Compilar", "color": "#f39c12"},
+            {"text": "▶️", "command": self.run_codigo_p, "tooltip": "Ejecutar Código P", "color": "#9b59b6"}
         ]
         
         btn_style_compiler = btn_style.copy()  # Crear una copia del diccionario 
@@ -1244,6 +1246,174 @@ class CompilerIDE:
             btn_close = tk.Button(frame, text="Cerrar", command=compile_window.destroy, 
                     bg="#e74c3c", fg="white", relief=tk.FLAT, padx=15, pady=5)
             btn_close.pack(pady=(10, 0))
+
+    def run_codigo_p(self):
+        """Ejecuta el código P generado usando el intérprete"""
+        self.status_label.config(text="Ejecutando código P...")
+        
+        # Primero hacer análisis semántico para generar código P
+        try:
+            code = self.text_area.get("1.0", tk.END)
+            tokens, lex_errors = tokenize(code)
+            
+            if lex_errors:
+                messagebox.showerror("Error", "Hay errores léxicos. Corrígelos primero.")
+                return
+            
+            analizador = AnalizadorSintactico(tokens)
+            ast = analizador.parse()
+            
+            if analizador.errores:
+                messagebox.showerror("Error", "Hay errores sintácticos. Corrígelos primero.")
+                return
+            
+            import importlib
+            import analisis_semantico
+            importlib.reload(analisis_semantico)
+            from analisis_semantico import AnalizadorSemantico
+            
+            analizador_sem = AnalizadorSemantico(ast)
+            
+            try:
+                resultado = analizador_sem.analizar()
+                
+                # Desempaquetar resultado
+                if isinstance(resultado, tuple) and len(resultado) == 6:
+                    tabla, errores, advertencias, codigo_intermedio, semantico_detalle, codigo_p = resultado
+                else:
+                    messagebox.showerror("Error", f"Resultado del análisis semántico inválido: {type(resultado)}")
+                    return
+                
+                if errores:
+                    msg = "Errores semánticos:\n" + "\n".join(errores[:5])
+                    messagebox.showerror("Error", msg)
+                    return
+                
+                if not codigo_p or not isinstance(codigo_p, list):
+                    messagebox.showerror("Error", f"Código P inválido: tipo={type(codigo_p)}, len={len(codigo_p) if codigo_p else 0}")
+                    return
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Error en análisis semántico: {str(e)}\n{type(e).__name__}")
+                import traceback
+                print(traceback.format_exc())
+                return
+            
+            # Crear ventana de ejecución
+            exec_window = tk.Toplevel(self.root)
+            exec_window.title("Ejecutando Código P")
+            exec_window.geometry("600x500")
+            
+            # Centrar la ventana
+            x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (300)
+            y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (250)
+            exec_window.geometry(f"+{x}+{y}")
+            
+            # Frame principal
+            main_frame = tk.Frame(exec_window, bg="white", padx=10, pady=10)
+            main_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Título
+            title = tk.Label(main_frame, text="🖥️ Consola de Ejecución", 
+                           font=("Arial", 14, "bold"), bg="white")
+            title.pack(pady=(0, 10))
+            
+            # Área de texto para la consola
+            console_frame = tk.Frame(main_frame, bg="#1e1e1e", relief=tk.SUNKEN, bd=2)
+            console_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+            
+            console = scrolledtext.ScrolledText(console_frame, wrap=tk.WORD, 
+                                               bg="#1e1e1e", fg="#00ff00",
+                                               font=("Consolas", 10), 
+                                               insertbackground="#00ff00")
+            console.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+            
+            # Redirigir stdout a la consola
+            import sys
+            import io
+            
+            old_stdout = sys.stdout
+            old_stdin = sys.stdin
+            
+            # Crear un buffer para la salida
+            output_buffer = io.StringIO()
+            sys.stdout = output_buffer
+            
+            # Variable para almacenar inputs
+            input_queue = []
+            input_index = [0]
+            
+            # Función para manejar input
+            def custom_input(prompt=""):
+                if prompt:
+                    console.insert(tk.END, prompt)
+                    console.see(tk.END)
+                    console.update()
+                
+                # Crear un diálogo para entrada
+                input_dialog = tk.Toplevel(exec_window)
+                input_dialog.title("Entrada requerida")
+                input_dialog.geometry("300x100")
+                input_dialog.transient(exec_window)
+                input_dialog.grab_set()
+                
+                tk.Label(input_dialog, text=prompt if prompt else "Ingrese un valor:").pack(pady=10)
+                
+                entry = tk.Entry(input_dialog, font=("Consolas", 10))
+                entry.pack(pady=5)
+                entry.focus()
+                
+                result = [""]
+                
+                def on_ok():
+                    result[0] = entry.get()
+                    input_dialog.destroy()
+                
+                entry.bind('<Return>', lambda e: on_ok())
+                tk.Button(input_dialog, text="OK", command=on_ok).pack(pady=5)
+                
+                input_dialog.wait_window()
+                
+                return result[0]
+            
+            # Reemplazar input
+            import builtins
+            old_input = builtins.input
+            builtins.input = custom_input
+            
+            try:
+                # Ejecutar el código P
+                ejecutar_codigo_p(codigo_p)
+                
+                # Obtener la salida
+                output = output_buffer.getvalue()
+                console.insert(tk.END, output)
+                console.insert(tk.END, "\n\n✅ Ejecución completada exitosamente")
+                
+            except Exception as e:
+                console.insert(tk.END, f"\n\n❌ Error en ejecución: {str(e)}")
+                import traceback
+                console.insert(tk.END, f"\n{traceback.format_exc()}")
+            
+            finally:
+                # Restaurar stdout y stdin
+                sys.stdout = old_stdout
+                sys.stdin = old_stdin
+                builtins.input = old_input
+            
+            console.config(state=tk.DISABLED)
+            
+            # Botón para cerrar
+            btn_close = tk.Button(main_frame, text="Cerrar", command=exec_window.destroy,
+                                 bg=self.colors["accent"], fg="white", relief=tk.FLAT,
+                                 padx=20, pady=8, font=("Arial", 10))
+            btn_close.pack()
+            
+            self.status_label.config(text="Ejecución completada")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al ejecutar: {str(e)}")
+            self.status_label.config(text="Error en ejecución")
 
     def update_line_col(self, event=None):
         cursor_index = self.text_area.index(tk.INSERT)
